@@ -24,6 +24,7 @@ import {
   patchHeader,
   setViPointBalance,
   uploadImage,
+  setAppCredentials,
   useSyncStatus,
   type VideoCategory,
 } from '../store';
@@ -182,49 +183,66 @@ function AdminPanel({ onLogout }: { onLogout: () => void }) {
               </div>
             </div>
           </div>
-          <div className="flex items-center gap-2 pr-1">
-            <span style={{ fontSize: 12, color: sync.status === 'error' ? B.orange : B.inkMuted }}>
+          <div className="flex items-center gap-1.5 pr-1">
+            {/* Sync status — ẩn text trên mobile nhỏ */}
+            <span className="hidden sm:inline" style={{ fontSize: 12, color: sync.status === 'error' ? B.orange : B.inkMuted }}>
               {sync.status === 'pulling' && '⟳ đang tải...'}
               {sync.status === 'pushing' && '⟳ đang đẩy...'}
-              {sync.status === 'ok' && (savedAt ? '✓ đã lưu & sync' : '✓ đã sync')}
-              {sync.status === 'error' && '⚠ sync lỗi'}
+              {sync.status === 'ok' && (savedAt ? '✓ đã lưu' : '✓ sync')}
+              {sync.status === 'error' && '⚠ lỗi'}
             </span>
-            <PillBtn onClick={() => pullSettings()} icon={<RotateCcw size={12} />}>Pull</PillBtn>
-            <PillBtn onClick={onLogout} icon={<LogOut size={12} />}>Thoát</PillBtn>
-            {dirty && <PillBtn onClick={discard}>Huỷ</PillBtn>}
+            {/* Pull — icon only on mobile */}
+            <button onClick={() => pullSettings()}
+              className="h-9 px-2 sm:px-3 inline-flex items-center gap-1"
+              style={{ background: B.canvas, color: B.ink, borderRadius: B.radiusPill, fontSize: 13 }}>
+              <RotateCcw size={13} /><span className="hidden sm:inline">Pull</span>
+            </button>
+            <button onClick={onLogout}
+              className="h-9 px-2 sm:px-3 inline-flex items-center gap-1"
+              style={{ background: B.canvas, color: B.ink, borderRadius: B.radiusPill, fontSize: 13 }}>
+              <LogOut size={13} /><span className="hidden sm:inline">Thoát</span>
+            </button>
+            {dirty && (
+              <button onClick={discard}
+                className="h-9 px-2 sm:px-3 inline-flex items-center"
+                style={{ background: B.canvas, color: B.ink, borderRadius: B.radiusPill, fontSize: 13 }}>
+                <span className="hidden sm:inline">Huỷ</span><span className="sm:hidden">✕</span>
+              </button>
+            )}
             <button
-              onClick={save}
-              disabled={!dirty}
-              className="h-10 px-5 inline-flex items-center gap-1.5"
+              onClick={save} disabled={!dirty}
+              className="h-9 px-3 sm:px-5 inline-flex items-center gap-1.5"
               style={{
                 background: dirty ? B.ink : B.canvas,
                 color: dirty ? B.canvasPure : B.inkSubtle,
-                borderRadius: B.radiusPill,
-                fontSize: 14,
+                borderRadius: B.radiusPill, fontSize: 13,
                 cursor: dirty ? 'pointer' : 'not-allowed',
               }}
             >
-              <Save size={14} /> Lưu thay đổi
+              <Save size={13} /><span className="hidden sm:inline">Lưu thay đổi</span><span className="sm:hidden">Lưu</span>
             </button>
           </div>
         </header>
       </div>
 
-      <div className="max-w-[1240px] mx-auto flex px-5 pt-6 pb-10 gap-6">
-        <aside className="w-52 shrink-0 self-start sticky" style={{ top: 88 }}>
-          <nav className="flex flex-col gap-1 p-2" style={{ background: B.canvasPure, borderRadius: B.radiusLg }}>
+      <div className="max-w-[1240px] mx-auto flex flex-col md:flex-row px-3 md:px-5 pt-4 md:pt-6 pb-10 gap-4 md:gap-6">
+        {/* Sidebar — vertical on md+, horizontal scroll on mobile */}
+        <aside className="w-full md:w-52 md:shrink-0 md:self-start md:sticky" style={{ top: 88 }}>
+          <nav className="flex md:flex-col gap-1 p-2 overflow-x-auto no-scrollbar"
+            style={{ background: B.canvasPure, borderRadius: B.radiusLg }}>
             {SECTIONS.map((s) => {
               const active = section === s.key;
               return (
                 <button
                   key={s.key}
                   onClick={() => setSection(s.key)}
-                  className="text-left px-4 h-10"
+                  className="shrink-0 text-left px-4 h-10"
                   style={{
                     background: active ? B.ink : 'transparent',
                     color: active ? B.canvasPure : B.inkMuted,
                     borderRadius: B.radiusPill,
                     fontSize: 14,
+                    whiteSpace: 'nowrap',
                   }}
                 >
                   {s.label}
@@ -234,7 +252,7 @@ function AdminPanel({ onLogout }: { onLogout: () => void }) {
           </nav>
         </aside>
 
-        <main className="flex-1 min-w-0">
+        <main className="flex-1 min-w-0 overflow-x-hidden">
           {section === 'header' && <HeaderSection draft={draft} setDraft={setDraft} />}
           {section === 'trip' && <TripSection draft={draft} setDraft={setDraft} />}
           {section === 'badges' && <BadgesSection draft={draft} setDraft={setDraft} />}
@@ -746,7 +764,8 @@ function ProvincesSection({ draft, setDraft }: SP) {
                 };
                 return (
                   <div className="pb-2 px-3" style={{ background: `rgba(35,37,41,0.02)` }}>
-                    <div className="rounded overflow-hidden mb-2" style={{ border: `1px solid ${B.hairline}` }}>
+                    <div className="overflow-x-auto mb-2">
+                    <div className="rounded overflow-hidden" style={{ border: `1px solid ${B.hairline}`, minWidth: 560 }}>
                       <div className="grid px-3 py-1.5 font-ui"
                         style={{ gridTemplateColumns: '16px 20px 1fr 120px 110px 52px 30px 28px', background: B.canvas, fontSize: 10, fontWeight: 700, color: B.inkMuted }}>
                         <div></div><div>#</div><div>Tên địa điểm</div><div>Check-in</div><div>Trạng thái</div><div></div><div></div><div title="Toạ độ">📍</div>
@@ -857,6 +876,7 @@ function ProvincesSection({ draft, setDraft }: SP) {
                         </div>
                       ))}
                     </div>
+                    </div>{/* end overflow-x-auto */}
                     <div className="flex gap-2">
                       <button onClick={addSub} className="h-7 px-3 rounded font-ui inline-flex items-center gap-1"
                         style={{ background: B.ink, color: B.canvasPure, fontSize: 11, fontWeight: 700 }}>
@@ -1073,7 +1093,7 @@ function SubLocationsSection({ draft, setDraft }: SP) {
                     </div>
                   )}
 
-                  <div className="grid grid-cols-4 gap-3">
+                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
                     {subs.map((s) => (
                       <SubLocationCard
                         key={s.id}
@@ -1571,7 +1591,7 @@ function VideosSection({ draft, setDraft }: SP) {
     <>
       <SectionTitle hint="Video sẽ hiển thị ở tab Bảng Tin theo thứ tự từ trên xuống. Paste link YouTube để tự động điền thông tin.">Nội Dung</SectionTitle>
 
-      <div className="grid grid-cols-3 gap-4 mb-4">
+      <div className="grid grid-cols-2 sm:grid-cols-3 gap-4 mb-4">
         {draft.videos.map((v) => {
           const ytId = getYtId(v.url);
           const isFetching = fetching.has(v.id);
@@ -1865,6 +1885,8 @@ function CategoriesSection({ draft, setDraft }: SP) {
 
 function SecuritySection() {
   const settings = useSettings();
+
+  // Admin panel password
   const [cur, setCur] = useState('');
   const [pw1, setPw1] = useState('');
   const [pw2, setPw2] = useState('');
@@ -1881,14 +1903,16 @@ function SecuritySection() {
     setCur(''); setPw1(''); setPw2('');
     setMsg({ kind: 'ok', text: 'Đã đổi mật khẩu.' });
   };
+
   return (
     <>
-      <SectionTitle hint={hasPw ? 'Đổi mật khẩu admin.' : 'Mật khẩu mặc định là "admin". Đặt mật khẩu mới ngay.'}>
+      <SectionTitle hint={hasPw ? 'Đổi mật khẩu đăng nhập trang /admin.' : 'Mặc định là "admin". Đặt mật khẩu mới ngay.'}>
         Bảo Mật
       </SectionTitle>
+
       <Card>
-        <form onSubmit={submit}>
-          <Field label="Mật khẩu hiện tại">
+        <form onSubmit={submit} className="flex flex-col gap-2">
+          <Field label={hasPw ? 'Mật khẩu hiện tại' : 'Mật khẩu hiện tại (mặc định "admin")'}>
             <TextInput type="password" value={cur} onChange={(e) => setCur(e.target.value)} />
           </Field>
           <Field label="Mật khẩu mới">
@@ -1898,18 +1922,15 @@ function SecuritySection() {
             <TextInput type="password" value={pw2} onChange={(e) => setPw2(e.target.value)} />
           </Field>
           {msg && (
-            <div className="font-ui mb-2" style={{ fontSize: 12, color: msg.kind === 'ok' ? B.ink : B.orange }}>
+            <div className="font-ui" style={{ fontSize: 12, color: msg.kind === 'ok' ? '#16a34a' : B.orange }}>
               {msg.text}
             </div>
           )}
-          <button type="submit" className="h-9 px-3 rounded font-ui"
+          <button type="submit" className="h-9 px-3 rounded font-ui self-start"
             style={{ background: B.ink, color: B.canvasPure, fontSize: 13, fontWeight: 700 }}>
-            Đổi mật khẩu
+            Đổi mật khẩu admin
           </button>
         </form>
-        <div className="font-ui mt-3" style={{ fontSize: 11, color: B.inkMuted }}>
-          Lưu ý: mật khẩu hash SHA-256 lưu trong localStorage trình duyệt. Chỉ phù hợp bảo vệ nhẹ, không thay thế xác thực server-side.
-        </div>
       </Card>
     </>
   );

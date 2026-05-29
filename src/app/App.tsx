@@ -27,6 +27,7 @@ export default function App() {
 
 function MainApp() {
   const settings = useSettings();
+
   useEffect(() => {
     pullSettings();
   }, []);

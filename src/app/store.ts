@@ -50,6 +50,11 @@ export type AppSettings = {
     /** SHA-256 hex của mật khẩu. Rỗng = mặc định "admin". */
     passwordHash: string;
   };
+  appAuth: {
+    username: string;
+    /** SHA-256 hex. Rỗng = mặc định "123312". */
+    passwordHash: string;
+  };
   episodeColors: Record<number, string>;
   badges: Badge[];
   provinces: Province[];
@@ -67,6 +72,7 @@ export const DEFAULT_SETTINGS: AppSettings = {
   trip: { totalKm: DEFAULT_TOTAL_KM, currentKm: DEFAULT_CURRENT_KM },
   viPoint: 180,
   admin: { passwordHash: '' },
+  appAuth: { username: 'admin', passwordHash: '' },
   episodeColors: { ...DEFAULT_EPISODE_COLORS },
   badges: DEFAULT_BADGES.map((b) => ({ ...b })),
   provinces: DEFAULT_PROVINCES.map((p) => ({ ...p })),
@@ -87,6 +93,7 @@ function readStorage(): AppSettings {
       header: { ...DEFAULT_SETTINGS.header, ...(parsed.header ?? {}) },
       trip: { ...DEFAULT_SETTINGS.trip, ...(parsed.trip ?? {}) },
       admin: { ...DEFAULT_SETTINGS.admin, ...(parsed.admin ?? {}) },
+      appAuth: { ...DEFAULT_SETTINGS.appAuth, ...(parsed.appAuth ?? {}) },
       episodeColors: { ...DEFAULT_SETTINGS.episodeColors, ...(parsed.episodeColors ?? {}) },
       badges: parsed.badges ?? DEFAULT_SETTINGS.badges,
       provinces: (() => {
@@ -165,6 +172,34 @@ export function getSubLocations(): SubLocation[] {
 }
 export function getEpisodeColors(): Record<number, string> {
   return state.episodeColors;
+}
+
+// ── App auth (login gate cho toàn app) ──────────────────────────────────────
+const APP_AUTH_KEY = 'lao-tao:app-auth';
+const APP_DEFAULT_PASSWORD = '123312';
+
+export async function verifyAppLogin(username: string, password: string): Promise<boolean> {
+  const stored = state.appAuth;
+  if (username.trim().toLowerCase() !== (stored.username || 'admin').toLowerCase()) return false;
+  if (!stored.passwordHash) return password === APP_DEFAULT_PASSWORD;
+  const h = await sha256Hex(password);
+  return h === stored.passwordHash;
+}
+
+export function isAppAuthed(): boolean {
+  try { return sessionStorage.getItem(APP_AUTH_KEY) === '1'; } catch { return false; }
+}
+
+export function setAppAuthed(v: boolean) {
+  try {
+    if (v) sessionStorage.setItem(APP_AUTH_KEY, '1');
+    else sessionStorage.removeItem(APP_AUTH_KEY);
+  } catch {}
+}
+
+export async function setAppCredentials(username: string, password: string): Promise<void> {
+  const hash = password ? await sha256Hex(password) : '';
+  setSettings({ ...state, appAuth: { username: username || 'admin', passwordHash: hash } });
 }
 
 // ── Admin auth ──────────────────────────────────────────────────────────────
