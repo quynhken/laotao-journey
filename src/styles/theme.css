@@ -1,0 +1,167 @@
+@custom-variant dark (&:is(.dark *));
+
+:root {
+  /* Base44 — Backgrounds */
+  --bg-base: #FAF9F7;      /* canvas, warm off-white (page) */
+  --bg-warm: #FAF9F7;      /* same canvas */
+  --bg-surface: #FFFFFF;   /* canvas-pure, card surfaces */
+  --bg-elevated: #FFFFFF;
+
+  /* Base44 — Accent (Sunset Orange) */
+  --accent-100: #FFE9DA;   /* peach tint backgrounds */
+  --accent-300: #FF983B;   /* amber */
+  --accent-400: #FF854F;   /* semantic "new" */
+  --accent-500: #FF631F;   /* brand orange */
+  --accent-600: #E54F0F;   /* darker brand */
+
+  /* Base44 — Semantic */
+  --success: #2D6A3F;
+  --success-bg: #EBF5EE;
+  --danger: #FF631F;
+  --danger-bg: #FFE9DA;
+  --warning: #FF983B;
+  --warning-bg: #FFF1E2;
+  --info: #1E4D8C;
+  --info-bg: #EBF2FB;
+  --lime: #EBFFB1;          /* Base44 lime — nav CTA only */
+
+  /* Base44 — Text (ink palette, never pure black) */
+  --text-primary: #232529;  /* ink */
+  --text-secondary: #727272; /* ink-muted */
+  --text-tertiary: #B0B0B0;  /* ink-subtle */
+  --text-accent: #FF631F;
+  --text-inverse: #FFFFFF;
+  --text-muted: #B0B0B0;
+
+  /* Base44 — Border (hairlines from ink @ 8%) */
+  --border-subtle: rgba(35, 37, 41, 0.08);
+  --border-default: rgba(35, 37, 41, 0.08);
+  --border-strong: rgba(35, 37, 41, 0.16);
+  --border-accent: #FF631F;
+
+  /* Regions — warmed to match sunset metaphor */
+  --region-north: #FF631F;
+  --region-central: #FF983B;
+  --region-south: #FF854F;
+
+  /* Base44 — Radius */
+  --radius-sm: 8px;
+  --radius-md: 12px;
+  --radius-lg: 20px;
+  --radius-xl: 24px;
+  --radius-2xl: 24px;
+  --radius-pill: 100px;
+  --radius-full: 9999px;
+
+  /* Spacing */
+  --space-1: 4px;  --space-2: 8px;  --space-3: 12px;
+  --space-4: 16px; --space-5: 20px; --space-6: 24px;
+  --space-8: 32px; --space-10: 40px; --space-12: 48px;
+
+  /* Duration & easing */
+  --duration-fast: 150ms;
+  --duration-normal: 250ms;
+  --duration-slow: 400ms;
+  --duration-story: 800ms;
+  --ease-default: cubic-bezier(0.4, 0, 0.2, 1);
+  --ease-spring: cubic-bezier(0.34, 1.56, 0.64, 1);
+
+  /* Fonts */
+  --font-display: 'Be Vietnam Pro', system-ui, sans-serif;
+  --font-body: 'Be Vietnam Pro', system-ui, sans-serif;
+  --font-ui: 'Be Vietnam Pro', system-ui, sans-serif;
+  --font-mono: 'Be Vietnam Pro', ui-monospace, monospace;
+
+  /* shadcn compat */
+  --background: var(--bg-base);
+  --foreground: var(--text-primary);
+  --border: var(--border-subtle);
+  --radius: 14px;
+  --font-size: 16px;
+}
+
+@theme inline {
+  --color-background: var(--bg-base);
+  --color-foreground: var(--text-primary);
+  --color-border: var(--border-subtle);
+  --font-display: var(--font-display);
+  --font-body: var(--font-body);
+  --font-ui: var(--font-ui);
+  --font-mono: var(--font-mono);
+}
+
+@layer base {
+  * { border-color: var(--border-subtle); }
+  html { font-size: var(--font-size); }
+  body {
+    background: var(--bg-warm);
+    color: var(--text-primary);
+    font-family: var(--font-ui);
+    -webkit-font-smoothing: antialiased;
+  }
+  h1, h2, h3, h4 { font-family: var(--font-display); color: var(--text-primary); }
+  h1 { font-size: 2.5rem; line-height: 1.1; font-weight: 400; letter-spacing: -0.01em; }
+  h2 { font-size: 1.75rem; line-height: 1.15; font-weight: 400; letter-spacing: -0.005em; }
+  h3 { font-size: 1.25rem; line-height: 1.3; font-weight: 500; }
+  h4 { font-size: 1rem; line-height: 1.35; font-weight: 500; }
+  button { font-family: var(--font-ui); font-weight: 400; border-radius: 9999px; }
+  input, textarea { font-family: var(--font-ui); font-size: 1rem; color: var(--text-primary); }
+}
+
+/* ===== Animations ===== */
+@keyframes fogLift {
+  from { opacity: 0; filter: blur(12px) saturate(0) brightness(1.2); }
+  to   { opacity: 1; filter: blur(0)   saturate(1) brightness(1); }
+}
+@keyframes stampIn {
+  0%   { transform: scale(2.5) rotate(-20deg); opacity: 0; }
+  60%  { transform: scale(0.85) rotate(3deg);  opacity: 1; }
+  100% { transform: scale(1) rotate(0); opacity: 1; }
+}
+@keyframes marchingAnts { to { stroke-dashoffset: -20; } }
+@keyframes floatBike {
+  0%, 100% { transform: translate(-50%, 0); }
+  50%      { transform: translate(-50%, -4px); }
+}
+@keyframes pulseRing {
+  0%   { transform: scale(0.9); opacity: 0.6; }
+  70%  { transform: scale(1.9); opacity: 0; }
+  100% { transform: scale(0.9); opacity: 0; }
+}
+@keyframes pulseDot {
+  0%, 100% { opacity: 1; }
+  50%      { opacity: 0.55; }
+}
+@keyframes toastIn {
+  0%   { transform: translate(-50%, -16px) scale(0.9); opacity: 0; }
+  100% { transform: translate(-50%, 0) scale(1); opacity: 1; }
+}
+@keyframes fadeUp {
+  from { transform: translateY(8px); opacity: 0; }
+  to   { transform: translateY(0); opacity: 1; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { animation-duration: 0.01ms !important; transition-duration: 0.01ms !important; }
+}
+
+/* utility helpers */
+.font-display { font-family: var(--font-display); }
+.font-body    { font-family: var(--font-body); }
+.font-ui      { font-family: var(--font-ui); }
+.font-mono    { font-family: var(--font-mono); }
+
+/* Hide all scrollbars globally */
+*::-webkit-scrollbar { display: none; }
+* { -ms-overflow-style: none; scrollbar-width: none; }
+
+.no-scrollbar::-webkit-scrollbar { display: none; }
+.no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
+
+.paper-noise {
+  background-image:
+    radial-gradient(rgba(155,120,40,0.05) 1px, transparent 1px),
+    radial-gradient(rgba(155,120,40,0.04) 1px, transparent 1px);
+  background-size: 24px 24px, 17px 17px;
+  background-position: 0 0, 8px 8px;
+}

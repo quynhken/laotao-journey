@@ -1,0 +1,1693 @@
+import React, { useState, useEffect, useRef } from 'react';
+import { ArrowLeft, Save, RotateCcw, Download, Upload, Plus, Trash2, Lock, LogOut, ChevronRight, ChevronDown, CalendarDays, GripVertical, ChevronUp, X } from 'lucide-react';
+import {
+  useSettings,
+  setSettings,
+  resetSettings,
+  DEFAULT_SETTINGS,
+  type AppSettings,
+  type VideoItem,
+  verifyPassword,
+  setPassword,
+  isAuthed,
+  setAuthed,
+  pullSettings,
+  pushSettings,
+  patchProvince,
+  patchSubLocation,
+  deleteSubLocation,
+  patchVideo,
+  createCategory,
+  patchCategory,
+  deleteCategory,
+  useSyncStatus,
+  type VideoCategory,
+} from '../store';
+import type { Badge, Province, SubLocation } from './data';
+
+const PLACEHOLDER_IMG = "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='400' height='300' viewBox='0 0 400 300'%3E%3Crect width='400' height='300' fill='%23F3F4F6'/%3E%3Crect x='160' y='100' width='80' height='60' rx='6' fill='%23D1D5DB'/%3E%3Ccircle cx='230' cy='115' r='8' fill='%23E5E7EB'/%3E%3Cpolyline points='160,160 190,130 215,150 235,135 280,160' fill='%23D1D5DB' stroke='none'/%3E%3C/svg%3E";
+
+// ── Base44 tokens ───────────────────────────────────────────────────────────
+const B = {
+  canvas: '#FAF9F7',
+  canvasPure: '#FFFFFF',
+  ink: '#232529',
+  inkMuted: '#727272',
+  inkSubtle: '#B0B0B0',
+  orange: '#FF631F',
+  lime: '#EBFFB1',
+  limeHover: '#D6F090',
+  amber: '#FF983B',
+  danger: '#FF854F',
+  hairline: 'rgba(35,37,41,0.08)',
+  shadowNav: '0 2px 16px rgba(35,37,41,0.08)',
+  radiusSm: 8,
+  radiusMd: 12,
+  radiusLg: 20,
+  radiusXl: 24,
+  radiusPill: 100,
+};
+
+type Section = 'header' | 'trip' | 'badges' | 'provinces' | 'sublocations' | 'videos' | 'categories' | 'security';
+
+const SECTIONS: { key: Section; label: string }[] = [
+  { key: 'header', label: 'Header' },
+  { key: 'trip', label: 'Hành Trình' },
+  { key: 'badges', label: 'Huy Hiệu' },
+  { key: 'provinces', label: 'Tỉnh' },
+  { key: 'sublocations', label: 'Địa Điểm' },
+  { key: 'videos', label: 'Nội Dung' },
+  { key: 'categories', label: 'Danh Mục' },
+  { key: 'security', label: 'Bảo Mật' },
+];
+
+export function AdminPage() {
+  const [authed, setAuthedState] = useState(isAuthed());
+  if (!authed) return <LoginGate onSuccess={() => setAuthedState(true)} />;
+  return <AdminPanel onLogout={() => { setAuthed(false); setAuthedState(false); }} />;
+}
+
+function LoginGate({ onSuccess }: { onSuccess: () => void }) {
+  const [pw, setPw] = useState('');
+  const [err, setErr] = useState('');
+  const [busy, setBusy] = useState(false);
+  const submit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setBusy(true); setErr('');
+    const ok = await verifyPassword(pw);
+    setBusy(false);
+    if (ok) { setAuthed(true, pw); onSuccess(); }
+    else setErr('Mật khẩu không đúng.');
+  };
+  return (
+    <div className="min-h-dvh w-full grid place-items-center px-5"
+      style={{ background: `linear-gradient(180deg, #B4D8E8 0%, #FAE8D0 50%, #FAEABF 100%)`, color: B.ink }}>
+      <form onSubmit={submit} className="w-full max-w-sm p-8"
+        style={{ background: B.canvasPure, borderRadius: B.radiusXl }}>
+        <div className="inline-flex items-center gap-2 mb-5" style={{ color: B.orange }}>
+          <Lock size={16} />
+          <span style={{ fontSize: 13, letterSpacing: '0.05em', textTransform: 'uppercase' }}>Admin</span>
+        </div>
+        <div className="font-display mb-4" style={{ fontSize: 32, lineHeight: 1.1, color: B.ink }}>
+          Đăng nhập
+        </div>
+        <input
+          type="password"
+          autoFocus
+          value={pw}
+          onChange={(e) => setPw(e.target.value)}
+          placeholder="Mật khẩu (mặc định: admin)"
+          className="w-full h-11 px-4 font-ui outline-none mb-3"
+          style={{ background: B.canvas, border: `1px solid ${B.hairline}`, borderRadius: B.radiusMd, fontSize: 14, color: B.ink }}
+        />
+        {err && <div className="mb-3" style={{ fontSize: 13, color: B.orange }}>{err}</div>}
+        <button type="submit" disabled={busy}
+          className="w-full h-11 font-ui transition"
+          style={{ background: B.ink, color: B.canvasPure, borderRadius: B.radiusPill, fontSize: 14, opacity: busy ? 0.6 : 1 }}>
+          {busy ? '...' : 'Vào'}
+        </button>
+        <div className="mt-4" style={{ fontSize: 12, color: B.inkMuted }}>
+          Đổi mật khẩu trong tab Bảo Mật sau khi đăng nhập.
+        </div>
+      </form>
+    </div>
+  );
+}
+
+function AdminPanel({ onLogout }: { onLogout: () => void }) {
+  const settings = useSettings();
+  const sync = useSyncStatus();
+  const [section, setSection] = useState<Section>('header');
+  const [draft, setDraft] = useState<AppSettings>(settings);
+  const [savedAt, setSavedAt] = useState<number | null>(null);
+  const [pulledOnce, setPulledOnce] = useState(false);
+
+  useEffect(() => {
+    (async () => {
+      await pullSettings();
+      setPulledOnce(true);
+    })();
+  }, []);
+  // When upstream settings change (after pull), reset draft if user hasn't edited.
+  useEffect(() => {
+    if (!pulledOnce) return;
+    setDraft((d) => (JSON.stringify(d) === JSON.stringify(settings) ? d : settings));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [pulledOnce]);
+
+  const dirty = JSON.stringify(draft) !== JSON.stringify(settings);
+
+  const save = async () => {
+    setSettings(draft);
+    await pushSettings(draft);
+    setSavedAt(Date.now());
+    setTimeout(() => setSavedAt(null), 1800);
+  };
+  const discard = () => setDraft(settings);
+  const reset = () => {
+    if (!confirm('Khôi phục về mặc định? Tất cả thay đổi sẽ mất.')) return;
+    resetSettings();
+    setDraft(DEFAULT_SETTINGS);
+  };
+
+  return (
+    <div className="min-h-dvh w-full" style={{ background: B.canvas, color: B.ink }}>
+      <div className="sticky top-0 z-30 px-5 pt-4">
+        <header
+          className="mx-auto flex items-center justify-between px-3 h-14"
+          style={{
+            background: B.canvasPure, borderRadius: B.radiusPill, boxShadow: B.shadowNav,
+            maxWidth: 1240,
+          }}
+        >
+          <div className="flex items-center gap-2 pl-1">
+            <button
+              onClick={() => { window.location.href = '/'; }}
+              className="w-10 h-10 grid place-items-center"
+              style={{ background: B.canvas, borderRadius: B.radiusPill }}
+              title="Về trang chính"
+            >
+              <ArrowLeft size={16} color={B.ink} />
+            </button>
+            <div className="flex items-center gap-2 pl-1">
+              <span className="w-7 h-7 grid place-items-center" style={{ background: B.orange, borderRadius: 9999 }}>
+                <Lock size={13} color={B.canvasPure} />
+              </span>
+              <div style={{ fontSize: 15, fontWeight: 600, color: B.ink, letterSpacing: '-0.01em' }}>
+                Sổ Tay Admin
+              </div>
+            </div>
+          </div>
+          <div className="flex items-center gap-2 pr-1">
+            <span style={{ fontSize: 12, color: sync.status === 'error' ? B.orange : B.inkMuted }}>
+              {sync.status === 'pulling' && '⟳ đang tải...'}
+              {sync.status === 'pushing' && '⟳ đang đẩy...'}
+              {sync.status === 'ok' && (savedAt ? '✓ đã lưu & sync' : '✓ đã sync')}
+              {sync.status === 'error' && '⚠ sync lỗi'}
+            </span>
+            <PillBtn onClick={() => pullSettings()} icon={<RotateCcw size={12} />}>Pull</PillBtn>
+            <PillBtn onClick={onLogout} icon={<LogOut size={12} />}>Thoát</PillBtn>
+            {dirty && <PillBtn onClick={discard}>Huỷ</PillBtn>}
+            <button
+              onClick={save}
+              disabled={!dirty}
+              className="h-10 px-5 inline-flex items-center gap-1.5"
+              style={{
+                background: dirty ? B.ink : B.canvas,
+                color: dirty ? B.canvasPure : B.inkSubtle,
+                borderRadius: B.radiusPill,
+                fontSize: 14,
+                cursor: dirty ? 'pointer' : 'not-allowed',
+              }}
+            >
+              <Save size={14} /> Lưu thay đổi
+            </button>
+          </div>
+        </header>
+      </div>
+
+      <div className="max-w-[1240px] mx-auto flex px-5 pt-6 pb-10 gap-6">
+        <aside className="w-52 shrink-0 self-start sticky" style={{ top: 88 }}>
+          <nav className="flex flex-col gap-1 p-2" style={{ background: B.canvasPure, borderRadius: B.radiusLg }}>
+            {SECTIONS.map((s) => {
+              const active = section === s.key;
+              return (
+                <button
+                  key={s.key}
+                  onClick={() => setSection(s.key)}
+                  className="text-left px-4 h-10"
+                  style={{
+                    background: active ? B.ink : 'transparent',
+                    color: active ? B.canvasPure : B.inkMuted,
+                    borderRadius: B.radiusPill,
+                    fontSize: 14,
+                  }}
+                >
+                  {s.label}
+                </button>
+              );
+            })}
+          </nav>
+        </aside>
+
+        <main className="flex-1 min-w-0">
+          {section === 'header' && <HeaderSection draft={draft} setDraft={setDraft} />}
+          {section === 'trip' && <TripSection draft={draft} setDraft={setDraft} />}
+          {section === 'badges' && <BadgesSection draft={draft} setDraft={setDraft} />}
+          {section === 'provinces' && <ProvincesSection draft={draft} setDraft={setDraft} />}
+          {section === 'sublocations' && <SubLocationsSection draft={draft} setDraft={setDraft} />}
+          {section === 'videos' && <VideosSection draft={draft} setDraft={setDraft} />}
+          {section === 'categories' && <CategoriesSection draft={draft} setDraft={setDraft} />}
+          {section === 'security' && <SecuritySection />}
+        </main>
+      </div>
+    </div>
+  );
+}
+
+// ── Reusable inputs ─────────────────────────────────────────────────────────
+function PillBtn({ children, icon, onClick }: { children: React.ReactNode; icon?: React.ReactNode; onClick?: () => void }) {
+  return (
+    <button
+      onClick={onClick}
+      className="h-9 px-3 inline-flex items-center gap-1"
+      style={{ background: B.canvas, color: B.ink, borderRadius: B.radiusPill, fontSize: 13 }}
+    >
+      {icon}{children}
+    </button>
+  );
+}
+
+function Field({ label, children }: { label: string; children: React.ReactNode }) {
+  return (
+    <label className="block mb-3">
+      <div className="mb-1.5" style={{ fontSize: 12, color: B.inkMuted, letterSpacing: '0.02em' }}>
+        {label}
+      </div>
+      {children}
+    </label>
+  );
+}
+
+const inputStyle: React.CSSProperties = {
+  background: B.canvas,
+  border: `1px solid ${B.hairline}`,
+  borderRadius: B.radiusMd,
+  color: B.ink,
+};
+
+function TextInput(props: React.InputHTMLAttributes<HTMLInputElement>) {
+  return <input {...props} className="w-full h-10 px-4 outline-none" style={{ ...inputStyle, fontSize: 14, ...(props.style || {}) }} />;
+}
+function NumInput(props: React.InputHTMLAttributes<HTMLInputElement>) {
+  return <input type="number" {...props} className="w-full h-10 px-4 outline-none" style={{ ...inputStyle, fontSize: 14, ...(props.style || {}) }} />;
+}
+function TextArea(props: React.TextareaHTMLAttributes<HTMLTextAreaElement>) {
+  return <textarea {...props} className="w-full px-4 py-2.5 outline-none" style={{ ...inputStyle, fontSize: 14, minHeight: 72, ...(props.style || {}) }} />;
+}
+
+function Card({ children }: { children: React.ReactNode }) {
+  return (
+    <div className="p-8 mb-4" style={{ background: B.canvasPure, borderRadius: B.radiusXl }}>
+      {children}
+    </div>
+  );
+}
+function SectionTitle({ children, hint }: { children: React.ReactNode; hint?: string }) {
+  return (
+    <div className="mb-6">
+      <h2 className="font-display" style={{ fontSize: 40, lineHeight: 1.1, color: B.ink, letterSpacing: '-0.01em' }}>{children}</h2>
+      {hint && <div className="mt-2" style={{ fontSize: 14, color: B.inkMuted }}>{hint}</div>}
+    </div>
+  );
+}
+
+// ── Sections ────────────────────────────────────────────────────────────────
+type SP = { draft: AppSettings; setDraft: React.Dispatch<React.SetStateAction<AppSettings>> };
+
+function HeaderSection({ draft, setDraft }: SP) {
+  const h = draft.header;
+  const setH = (patch: Partial<typeof h>) => setDraft({ ...draft, header: { ...h, ...patch } });
+  const updateName = (i: number, v: string) => {
+    const next = [...h.typewriterNames];
+    next[i] = v;
+    setH({ typewriterNames: next });
+  };
+  return (
+    <>
+      <SectionTitle hint="Cấu hình hiển thị trên header của app.">Header</SectionTitle>
+      <Card>
+        <Field label="Ảnh Avatar">
+          <label className="flex items-center gap-3 cursor-pointer">
+            <div className="relative rounded-full overflow-hidden shrink-0"
+              style={{ width: 56, height: 56, background: 'var(--accent-100)', border: '2px solid var(--accent-300)' }}>
+              {h.avatarText?.startsWith('data:') || h.avatarText?.startsWith('http')
+                ? <img src={h.avatarText} alt="avatar" className="w-full h-full object-cover" onError={(e) => { (e.target as HTMLImageElement).src = PLACEHOLDER_IMG; }} />
+                : <div className="w-full h-full grid place-items-center font-ui" style={{ fontSize: 16, fontWeight: 800, color: 'var(--accent-600)' }}>{h.avatarText || 'LT'}</div>
+              }
+              <div className="absolute inset-0 grid place-items-center opacity-0 hover:opacity-100 transition-opacity rounded-full"
+                style={{ background: 'rgba(35,37,41,0.5)' }}>
+                <span style={{ fontSize: 18, color: '#fff' }}>↑</span>
+              </div>
+            </div>
+            <div>
+              <div className="font-ui" style={{ fontSize: 13, fontWeight: 600, color: B.ink }}>Tải lên ảnh</div>
+              <div className="font-ui" style={{ fontSize: 11, color: B.inkMuted }}>PNG, JPG — hiển thị tròn trên header</div>
+            </div>
+            <input type="file" accept="image/*" className="sr-only"
+              onChange={(e) => {
+                const file = e.target.files?.[0];
+                if (!file) return;
+                const reader = new FileReader();
+                reader.onload = (ev) => setH({ avatarText: ev.target?.result as string });
+                reader.readAsDataURL(file);
+              }} />
+          </label>
+        </Field>
+        <Field label="Đang ở (địa điểm hiện tại)">
+          <TextInput value={h.currentStop} onChange={(e) => setH({ currentStop: e.target.value })} />
+        </Field>
+        <div className="font-ui mb-1" style={{ fontSize: 12, color: B.inkMuted, fontWeight: 600 }}>
+          Các tên hiển thị (gõ luân phiên)
+        </div>
+        {h.typewriterNames.map((n, i) => (
+          <div key={i} className="flex gap-2 mb-2">
+            <TextInput value={n} onChange={(e) => updateName(i, e.target.value)} />
+            <button
+              onClick={() => setH({ typewriterNames: h.typewriterNames.filter((_, j) => j !== i) })}
+              className="h-9 w-9 rounded grid place-items-center"
+              style={{ background: B.canvas, border: `1px solid ${B.hairline}` }}
+            >
+              <Trash2 size={14} />
+            </button>
+          </div>
+        ))}
+        <button
+          onClick={() => setH({ typewriterNames: [...h.typewriterNames, ''] })}
+          className="h-8 px-3 rounded font-ui inline-flex items-center gap-1"
+          style={{ background: B.lime, color: B.ink, fontSize: 12, fontWeight: 700 }}
+        >
+          <Plus size={13} /> Thêm tên
+        </button>
+      </Card>
+      <Card>
+        <Field label="Điểm khởi tạo (Flex Điểm ban đầu)">
+          <NumInput value={draft.initialPoints} onChange={(e) => setDraft({ ...draft, initialPoints: Number(e.target.value) })} />
+        </Field>
+      </Card>
+    </>
+  );
+}
+
+function TripSection({ draft, setDraft }: SP) {
+  return (
+    <>
+      <SectionTitle hint="Tổng quãng đường và vị trí hiện tại.">Hành Trình</SectionTitle>
+      <Card>
+        <Field label="Tổng số km (TOTAL_KM)">
+          <NumInput value={draft.trip.totalKm} onChange={(e) => setDraft({ ...draft, trip: { ...draft.trip, totalKm: Number(e.target.value) } })} />
+        </Field>
+        <Field label="Đã đi (CURRENT_KM)">
+          <NumInput value={draft.trip.currentKm} onChange={(e) => setDraft({ ...draft, trip: { ...draft.trip, currentKm: Number(e.target.value) } })} />
+        </Field>
+        <div className="font-ui mt-2" style={{ fontSize: 12, color: B.inkMuted }}>
+          Tiến độ: {Math.round((draft.trip.currentKm / draft.trip.totalKm) * 100)}%
+        </div>
+      </Card>
+    </>
+  );
+}
+
+function BadgesSection({ draft, setDraft }: SP) {
+  const update = (i: number, patch: Partial<Badge>) => {
+    const next = draft.badges.map((b, j) => (j === i ? { ...b, ...patch } : b));
+    setDraft({ ...draft, badges: next });
+  };
+  const add = () => setDraft({ ...draft, badges: [...draft.badges, { icon: 'Star', name: '', desc: '', earned: false }] });
+  const remove = (i: number) => setDraft({ ...draft, badges: draft.badges.filter((_, j) => j !== i) });
+  return (
+    <>
+      <SectionTitle hint="Danh sách huy hiệu hiển thị trên hồ sơ.">Huy Hiệu</SectionTitle>
+      {draft.badges.map((b, i) => (
+        <Card key={i}>
+          <div className="grid grid-cols-[1fr_1fr_2fr_auto_auto] gap-2 items-end">
+            <Field label="Icon (lucide)"><TextInput value={b.icon} onChange={(e) => update(i, { icon: e.target.value })} /></Field>
+            <Field label="Tên"><TextInput value={b.name} onChange={(e) => update(i, { name: e.target.value })} /></Field>
+            <Field label="Mô tả"><TextInput value={b.desc} onChange={(e) => update(i, { desc: e.target.value })} /></Field>
+            <label className="inline-flex items-center gap-2 mb-3">
+              <input type="checkbox" checked={b.earned} onChange={(e) => update(i, { earned: e.target.checked })} />
+              <span className="font-ui" style={{ fontSize: 12 }}>Đã đạt</span>
+            </label>
+            <button onClick={() => remove(i)} className="h-9 w-9 rounded grid place-items-center mb-3" style={{ background: B.canvas, border: `1px solid ${B.hairline}` }}>
+              <Trash2 size={14} />
+            </button>
+          </div>
+        </Card>
+      ))}
+      <button onClick={add} className="h-9 px-3 rounded font-ui inline-flex items-center gap-1" style={{ background: B.lime, color: B.ink, fontSize: 13, fontWeight: 700 }}>
+        <Plus size={14} /> Thêm huy hiệu
+      </button>
+    </>
+  );
+}
+
+function ProvincesSection({ draft, setDraft }: SP) {
+  const [q, setQ] = useState('');
+  const [expanded, setExpanded] = useState<Set<number>>(new Set());
+  const [confirmed, setConfirmed] = useState<Set<number>>(new Set());
+  const [hoveredId, setHoveredId] = useState<number | null>(null);
+  const dragItemRef = useRef<number | null>(null);
+  const toggleExpanded = (id: number) => setExpanded(prev => { const s = new Set(prev); s.has(id) ? s.delete(id) : s.add(id); return s; });
+  const confirm_ = (id: number) => setConfirmed(prev => { const s = new Set(prev); s.add(id); return s; });
+  const unconfirm = (id: number) => setConfirmed(prev => { const s = new Set(prev); s.delete(id); return s; });
+  const update = (id: number, patch: Partial<Province>) => {
+    setDraft({ ...draft, provinces: draft.provinces.map((p) => (p.id === id ? { ...p, ...patch } : p)) });
+  };
+  const updateAndSave = (id: number, patch: Partial<Province>) => {
+    update(id, patch);
+    patchProvince(id, patch);
+  };
+  const remove = (id: number) => {
+    if (!confirm('Xoá tỉnh này? Các địa điểm thuộc tỉnh cũng sẽ bị xoá.')) return;
+    setDraft({
+      ...draft,
+      provinces: draft.provinces.filter((p) => p.id !== id),
+      subLocations: draft.subLocations.filter((s) => s.provinceId !== id),
+    });
+  };
+  const add = () => {
+    const nextId = draft.provinces.reduce((m, p) => Math.max(m, p.id), 0) + 1;
+    const np: Province = {
+      id: nextId, name: 'Tỉnh mới', lat: 16, lng: 107, region: 'central', episode: 1,
+      image: 'https://images.unsplash.com/photo-1528127269322-539801943592?w=400', status: 'locked',
+    };
+    setDraft({ ...draft, provinces: [...draft.provinces, np] });
+  };
+  const filtered = draft.provinces.filter((p) => p.name.toLowerCase().includes(q.toLowerCase()));
+  return (
+    <>
+      <SectionTitle hint="Bấm trạng thái để xoay vòng locked → flagged → visited.">Tỉnh</SectionTitle>
+      <div className="mb-3 flex gap-2">
+        <TextInput placeholder="Tìm tỉnh..." value={q} onChange={(e) => setQ(e.target.value)} />
+        <button onClick={add} className="h-9 px-3 rounded font-ui inline-flex items-center gap-1 shrink-0"
+          style={{ background: B.ink, color: B.canvasPure, fontSize: 12, fontWeight: 700 }}>
+          <Plus size={14} /> Thêm tỉnh
+        </button>
+      </div>
+      <div className="rounded-lg overflow-hidden" style={{ border: `1px solid ${B.hairline}` }}>
+        <div className="grid gap-2 px-3 py-2 font-ui"
+          style={{ gridTemplateColumns: '40px 1fr 110px', background: B.canvas, fontSize: 11, fontWeight: 700, color: B.inkMuted }}>
+          <div>ID</div><div>Tên</div><div>Trạng thái</div>
+        </div>
+        {filtered.map((p) => {
+          const subs = draft.subLocations.filter((s) => s.provinceId === p.id);
+          const isOpen = expanded.has(p.id);
+          return (
+            <div key={p.id} style={{ borderTop: `1px solid ${B.hairline}` }}
+              onMouseEnter={() => setHoveredId(p.id)} onMouseLeave={() => setHoveredId(null)}>
+              {(() => {
+                const isNew = p.id > 34;
+                const isConfirmed = confirmed.has(p.id);
+                const isEditing = isNew && !isConfirmed;
+                const showHoverActions = isNew && isConfirmed && hoveredId === p.id;
+                return (
+                  <div className="grid gap-2 px-3 py-2 items-center"
+                    style={{ gridTemplateColumns: isEditing ? '40px 48px 1fr 110px 64px 36px 36px' : showHoverActions ? '40px 48px 1fr 110px 64px 36px 36px' : '40px 48px 1fr 110px 64px' }}>
+                    <button onClick={() => toggleExpanded(p.id)}
+                      className="inline-flex items-center gap-0.5 font-ui"
+                      style={{ fontSize: 12, color: B.inkMuted }}>
+                      {isOpen ? <ChevronDown size={11} /> : <ChevronRight size={11} />}
+                      {p.id}
+                    </button>
+
+                    {/* Avatar upload */}
+                    <label title="Tải lên ảnh avatar" className="relative cursor-pointer shrink-0 rounded overflow-hidden"
+                      style={{ width: 48, height: 48, background: B.canvas, border: `1px solid ${B.hairline}` }}>
+                      {p.image
+                        ? <img src={p.image} alt="" className="w-full h-full object-cover" onError={(e) => { (e.target as HTMLImageElement).src = PLACEHOLDER_IMG; }} />
+                        : <img src={PLACEHOLDER_IMG} alt="" className="w-full h-full object-cover" />
+                      }
+                      <div className="absolute inset-0 grid place-items-center opacity-0 hover:opacity-100 transition-opacity"
+                        style={{ background: 'rgba(35,37,41,0.55)' }}>
+                        <span style={{ fontSize: 12, color: '#fff' }}>↑</span>
+                      </div>
+                      <input type="file" accept="image/*" className="sr-only"
+                        onChange={(e) => {
+                          const file = e.target.files?.[0];
+                          if (!file) return;
+                          const reader = new FileReader();
+                          reader.onload = (ev) => updateAndSave(p.id, { image: ev.target?.result as string });
+                          reader.readAsDataURL(file);
+                        }} />
+                    </label>
+
+                    {isEditing
+                      ? <TextInput value={p.name} onChange={(e) => update(p.id, { name: e.target.value })} />
+                      : <div className="font-ui truncate" style={{ fontSize: 13, fontWeight: 700, color: B.ink }}>{p.name}</div>
+                    }
+                    <StatusButton status={p.status} onChange={(s) => updateAndSave(p.id, { status: s })} />
+                    <button
+                      title="Check-in tại đây"
+                      onClick={() => setDraft({ ...draft, header: { ...draft.header, currentStop: p.name } })}
+                      className="h-8 px-2 rounded font-ui inline-flex items-center justify-center gap-1 transition"
+                      style={{
+                        background: draft.header.currentStop === p.name ? B.orange : B.canvas,
+                        color: draft.header.currentStop === p.name ? B.canvasPure : B.inkMuted,
+                        border: `1px solid ${draft.header.currentStop === p.name ? B.orange : B.hairline}`,
+                        fontSize: 11, fontWeight: 700,
+                      }}
+                    >
+                      {draft.header.currentStop === p.name ? '📍 Đây' : 'Check-in'}
+                    </button>
+                    {isEditing && <>
+                      <button onClick={() => confirm_(p.id)} title="Xác nhận"
+                        className="h-8 w-8 rounded grid place-items-center"
+                        style={{ background: '#EBFFB1', border: `1px solid ${B.hairline}` }}>
+                        <span className="font-ui" style={{ fontSize: 14, color: B.ink }}>✓</span>
+                      </button>
+                      <button onClick={() => remove(p.id)} title="Xoá"
+                        className="h-8 w-8 rounded grid place-items-center"
+                        style={{ background: B.canvas, border: `1px solid ${B.hairline}` }}>
+                        <Trash2 size={13} />
+                      </button>
+                    </>}
+                    {showHoverActions && <>
+                      <button onClick={() => unconfirm(p.id)} title="Sửa tên"
+                        className="h-8 w-8 rounded grid place-items-center"
+                        style={{ background: B.canvas, border: `1px solid ${B.hairline}` }}>
+                        <span className="font-ui" style={{ fontSize: 13 }}>✎</span>
+                      </button>
+                      <button onClick={() => remove(p.id)} title="Xoá"
+                        className="h-8 w-8 rounded grid place-items-center"
+                        style={{ background: B.canvas, border: `1px solid ${B.hairline}` }}>
+                        <Trash2 size={13} />
+                      </button>
+                    </>}
+                  </div>
+                );
+              })()}
+              {isOpen && (() => {
+                const provSubs = draft.subLocations.filter((s) => s.provinceId === p.id).sort((a, b) => a.locNum - b.locNum);
+                const updateSub = (sid: number, patch: Partial<SubLocation>) =>
+                  setDraft({ ...draft, subLocations: draft.subLocations.map((s) => s.id === sid ? { ...s, ...patch } : s) });
+                const removeSub = (sid: number) => {
+                  if (!confirm('Xoá địa điểm này?')) return;
+                  setDraft({ ...draft, subLocations: draft.subLocations.filter((s) => s.id !== sid) });
+                  deleteSubLocation(sid);
+                };
+                const updateSubStatus = (sid: number, status: SubLocation['status']) => {
+                  updateSub(sid, { status });
+                  patchSubLocation(sid, { status });
+                };
+                const moveSubUp = (sid: number) => {
+                  const idx = provSubs.findIndex((s) => s.id === sid);
+                  if (idx <= 0) return;
+                  const a = provSubs[idx - 1], b = provSubs[idx];
+                  setDraft({ ...draft, subLocations: draft.subLocations.map((s) => s.id === b.id ? { ...s, locNum: a.locNum } : s.id === a.id ? { ...s, locNum: b.locNum } : s) });
+                };
+                const moveSubDown = (sid: number) => {
+                  const idx = provSubs.findIndex((s) => s.id === sid);
+                  if (idx < 0 || idx >= provSubs.length - 1) return;
+                  const a = provSubs[idx], b = provSubs[idx + 1];
+                  setDraft({ ...draft, subLocations: draft.subLocations.map((s) => s.id === a.id ? { ...s, locNum: b.locNum } : s.id === b.id ? { ...s, locNum: a.locNum } : s) });
+                };
+                const onDragOver = (e: React.DragEvent) => e.preventDefault();
+                const onDrop = (e: React.DragEvent, targetId: number) => {
+                  e.preventDefault();
+                  const dragId = dragItemRef.current;
+                  if (dragId === null || dragId === targetId) return;
+                  const fromIdx = provSubs.findIndex((s) => s.id === dragId);
+                  const toIdx = provSubs.findIndex((s) => s.id === targetId);
+                  if (fromIdx < 0 || toIdx < 0) return;
+                  const reordered = [...provSubs];
+                  const [moved] = reordered.splice(fromIdx, 1);
+                  reordered.splice(toIdx, 0, moved);
+                  const nums = new Map(reordered.map((s, i) => [s.id, i + 1]));
+                  setDraft({ ...draft, subLocations: draft.subLocations.map((s) => nums.has(s.id) ? { ...s, locNum: nums.get(s.id)! } : s) });
+                  dragItemRef.current = null;
+                };
+                const addSub = () => {
+                  const inProv = draft.subLocations.filter((s) => s.provinceId === p.id);
+                  const nextId = draft.subLocations.reduce((m, s) => Math.max(m, s.id), 0) + 1;
+                  const nextLoc = inProv.reduce((m, s) => Math.max(m, s.locNum), 0) + 1;
+                  const ns: SubLocation = {
+                    id: nextId, provinceId: p.id, episode: p.episode, locNum: nextLoc,
+                    name: 'Địa điểm mới', province: p.name, region: p.region,
+                    km: 0, date: '—', quote: '"..."',
+                    image: p.image, status: 'locked', lat: p.lat, lng: p.lng,
+                  };
+                  setDraft({ ...draft, subLocations: [...draft.subLocations, ns] });
+                };
+                return (
+                  <div className="pb-2 px-3" style={{ background: `rgba(35,37,41,0.02)` }}>
+                    <div className="rounded overflow-hidden mb-2" style={{ border: `1px solid ${B.hairline}` }}>
+                      <div className="grid px-3 py-1.5 font-ui"
+                        style={{ gridTemplateColumns: '16px 20px 1fr 120px 110px 52px 30px', background: B.canvas, fontSize: 10, fontWeight: 700, color: B.inkMuted }}>
+                        <div></div><div>#</div><div>Tên địa điểm</div><div>Check-in</div><div>Trạng thái</div><div></div><div></div>
+                      </div>
+                      {provSubs.length === 0 && (
+                        <div className="px-3 py-2 font-ui" style={{ fontSize: 11, color: B.inkSubtle }}>Chưa có địa điểm</div>
+                      )}
+                      {provSubs.map((s, idx) => (
+                        <div key={s.id} className="grid px-3 py-1.5 items-center gap-1"
+                          draggable
+                          onDragStart={() => { dragItemRef.current = s.id; }}
+                          onDragOver={onDragOver}
+                          onDrop={(e) => onDrop(e, s.id)}
+                          style={{ gridTemplateColumns: '16px 20px 1fr 120px 110px 52px 30px', borderTop: `1px solid ${B.hairline}`, cursor: 'grab' }}>
+                          <GripVertical size={12} style={{ color: B.inkSubtle }} />
+                          <span className="font-ui" style={{ fontSize: 11, color: B.inkSubtle }}>{idx + 1}</span>
+                          <TextInput value={s.name} onChange={(e) => updateSub(s.id, { name: e.target.value })} style={{ height: 30, fontSize: 11, padding: '0 8px' }} />
+                          <div className="relative">
+                            <input type="date" value={s.date === '—' ? '' : s.date}
+                              onChange={(e) => updateSub(s.id, { date: e.target.value || '—' })}
+                              className="h-[30px] w-full pl-2 pr-7 font-ui outline-none rounded"
+                              style={{ ...inputStyle, fontSize: 11 }} />
+                            <CalendarDays size={12} className="absolute right-2 top-1/2 -translate-y-1/2 pointer-events-none" style={{ color: B.inkMuted }} />
+                          </div>
+                          <StatusButton status={s.status} onChange={(st) => updateSubStatus(s.id, st)} />
+                          <div className="flex flex-col gap-0.5">
+                            <button onClick={() => moveSubUp(s.id)} disabled={idx === 0}
+                              className="h-[22px] w-full rounded grid place-items-center"
+                              style={{ background: B.canvas, border: `1px solid ${B.hairline}`, opacity: idx === 0 ? 0.3 : 1 }}>
+                              <ChevronUp size={10} />
+                            </button>
+                            <button onClick={() => moveSubDown(s.id)} disabled={idx === provSubs.length - 1}
+                              className="h-[22px] w-full rounded grid place-items-center"
+                              style={{ background: B.canvas, border: `1px solid ${B.hairline}`, opacity: idx === provSubs.length - 1 ? 0.3 : 1 }}>
+                              <ChevronDown size={10} />
+                            </button>
+                          </div>
+                          <button onClick={() => removeSub(s.id)} className="h-7 w-7 rounded grid place-items-center"
+                            style={{ background: B.canvas, border: `1px solid ${B.hairline}` }}>
+                            <Trash2 size={11} />
+                          </button>
+                        </div>
+                      ))}
+                    </div>
+                    <button onClick={addSub} className="h-7 px-3 rounded font-ui inline-flex items-center gap-1"
+                      style={{ background: B.ink, color: B.canvasPure, fontSize: 11, fontWeight: 700 }}>
+                      <Plus size={11} /> Thêm địa điểm
+                    </button>
+                  </div>
+                );
+              })()}
+            </div>
+          );
+        })}
+      </div>
+    </>
+  );
+}
+
+function SubLocationsSection({ draft, setDraft }: SP) {
+  const [q, setQ] = useState('');
+  const [pid, setPid] = useState<number | 'all'>('all');
+  const [expandedPids, setExpandedPids] = useState<Set<number>>(new Set());
+
+  const toggleProvince = (id: number) =>
+    setExpandedPids((prev) => { const s = new Set(prev); s.has(id) ? s.delete(id) : s.add(id); return s; });
+
+  const update = (id: number, patch: Partial<SubLocation>) => {
+    setDraft({ ...draft, subLocations: draft.subLocations.map((s) => (s.id === id ? { ...s, ...patch } : s)) });
+    if ('status' in patch) patchSubLocation(id, { status: patch.status });
+    if ('images' in patch || 'image' in patch) patchSubLocation(id, { images: patch.images, image: patch.image });
+  };
+  const remove = (id: number) => {
+    if (!confirm('Xoá địa điểm này?')) return;
+    setDraft({ ...draft, subLocations: draft.subLocations.filter((s) => s.id !== id) });
+    deleteSubLocation(id);
+  };
+  const add = (targetPid: number) => {
+    const prov = draft.provinces.find((p) => p.id === targetPid)!;
+    const inProv = draft.subLocations.filter((s) => s.provinceId === targetPid);
+    const nextId = draft.subLocations.reduce((m, s) => Math.max(m, s.id), 0) + 1;
+    const nextLoc = inProv.reduce((m, s) => Math.max(m, s.locNum), 0) + 1;
+    const ns: SubLocation = {
+      id: nextId, provinceId: targetPid, episode: prov.episode, locNum: nextLoc,
+      name: 'Địa điểm mới', province: prov.name, region: prov.region,
+      km: 0, date: '—', quote: '"..."',
+      image: prov.image, status: 'locked', lat: prov.lat, lng: prov.lng,
+    };
+    setDraft({ ...draft, subLocations: [...draft.subLocations, ns] });
+    setExpandedPids((prev) => new Set(prev).add(targetPid));
+  };
+
+  const provincesToShow = pid === 'all'
+    ? draft.provinces
+    : draft.provinces.filter((p) => p.id === pid);
+
+  const filteredSubs = (pId: number) =>
+    draft.subLocations
+      .filter((s) => s.provinceId === pId)
+      .filter((s) => !q || s.name.toLowerCase().includes(q.toLowerCase()) || s.quote.toLowerCase().includes(q.toLowerCase()))
+      .sort((a, b) => a.locNum - b.locNum);
+
+  // Province-inherited fields that are READ-ONLY in this tab
+  const ReadOnlyBadge = ({ label, value }: { label: string; value: string | number }) => (
+    <div className="flex flex-col gap-0.5">
+      <span className="font-ui" style={{ fontSize: 10, color: B.inkSubtle, letterSpacing: '0.04em', textTransform: 'uppercase' }}>{label}</span>
+      <div className="h-9 px-3 inline-flex items-center gap-1 font-ui rounded"
+        style={{ background: B.canvas, border: `1px dashed ${B.hairline}`, fontSize: 13, color: B.inkMuted, cursor: 'not-allowed' }}>
+        <Lock size={10} style={{ color: B.inkSubtle, flexShrink: 0 }} />
+        {value}
+      </div>
+    </div>
+  );
+
+  return (
+    <>
+      <SectionTitle hint="Mỗi Tỉnh chứa các địa điểm cấp 2. Thông tin kế thừa từ Tỉnh được khoá — chỉ bổ sung thêm thông tin hiển thị lên Card.">
+        Địa Điểm
+      </SectionTitle>
+
+      {/* Filter bar */}
+      <div className="flex gap-2 mb-4">
+        <TextInput placeholder="Tìm theo tên / quote..." value={q} onChange={(e) => setQ(e.target.value)} />
+        <select value={pid} onChange={(e) => setPid(e.target.value === 'all' ? 'all' : Number(e.target.value))}
+          className="h-10 px-2 font-ui" style={{ ...inputStyle, fontSize: 12, minWidth: 180 }}>
+          <option value="all">Tất cả tỉnh</option>
+          {draft.provinces.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
+        </select>
+      </div>
+
+      {/* Grouped by Province */}
+      <div className="flex flex-col gap-3">
+        {provincesToShow.map((prov) => {
+          const subs = filteredSubs(prov.id);
+          if (q && subs.length === 0) return null;
+          const isOpen = expandedPids.has(prov.id);
+          return (
+            <div key={prov.id} style={{ background: B.canvasPure, borderRadius: B.radiusXl, border: `1px solid ${B.hairline}`, overflow: 'hidden' }}>
+              {/* Province header — read-only info strip */}
+              <button
+                className="w-full flex items-center justify-between px-5 py-3"
+                style={{ background: B.canvas }}
+                onClick={() => toggleProvince(prov.id)}
+              >
+                <div className="flex items-center gap-3">
+                  {isOpen ? <ChevronDown size={14} color={B.inkMuted} /> : <ChevronRight size={14} color={B.inkMuted} />}
+                  <span className="font-ui" style={{ fontSize: 14, fontWeight: 700, color: B.ink }}>{prov.name}</span>
+                  <span className="font-ui px-2 py-0.5 rounded-full" style={{ fontSize: 11, background: B.hairline, color: B.inkMuted }}>
+                    Ep {prov.episode}
+                  </span>
+                  <span className="font-ui px-2 py-0.5 rounded-full" style={{ fontSize: 11, background: B.hairline, color: B.inkMuted }}>
+                    {prov.region}
+                  </span>
+                  <span className="font-ui px-2 py-0.5 rounded-full" style={{ fontSize: 11, background: B.hairline, color: B.inkMuted }}>
+                    {subs.length} địa điểm
+                  </span>
+                </div>
+                <div className="flex items-center gap-1.5" style={{ color: B.inkSubtle, fontSize: 11 }}>
+                  <Lock size={10} />
+                  <span className="font-ui">Kế thừa từ Tab Tỉnh</span>
+                </div>
+              </button>
+
+              {isOpen && (
+                <div className="px-5 pb-5 pt-3 flex flex-col gap-4">
+                  {subs.length === 0 && !q && (
+                    <div className="font-ui py-3 text-center" style={{ fontSize: 12, color: B.inkSubtle }}>
+                      Chưa có địa điểm nào. Bấm "+ Thêm địa điểm" bên dưới.
+                    </div>
+                  )}
+
+                  <div className="grid grid-cols-4 gap-3">
+                    {subs.map((s) => (
+                      <SubLocationCard
+                        key={s.id}
+                        s={s}
+                        provImg={draft.provinces.find((p) => p.id === s.provinceId)?.image ?? ''}
+                        onUpdate={(patch) => update(s.id, patch)}
+                        onRemove={() => remove(s.id)}
+                      />
+                    ))}
+                  </div>
+
+                  <button
+                    onClick={() => add(prov.id)}
+                    className="h-8 px-3 rounded font-ui inline-flex items-center gap-1 self-start"
+                    style={{ background: B.ink, color: B.canvasPure, fontSize: 12, fontWeight: 700 }}
+                  >
+                    <Plus size={12} /> Thêm địa điểm vào {prov.name}
+                  </button>
+                </div>
+              )}
+            </div>
+          );
+        })}
+      </div>
+    </>
+  );
+}
+
+function SubLocationCard({
+  s, provImg, onUpdate, onRemove,
+}: {
+  s: SubLocation;
+  provImg: string;
+  onUpdate: (patch: Partial<SubLocation>) => void;
+  onRemove: () => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const imgs = s.images ?? (s.image ? [s.image] : []);
+  const displayImg = imgs[0] || provImg;
+
+  const statusColors = {
+    locked:  { bg: '#E5E7EB', fg: '#6B7280', dot: '#9CA3AF' },
+    flagged: { bg: B.lime,    fg: B.ink,     dot: '#84cc16' },
+    visited: { bg: '#D1FAE5', fg: '#065F46', dot: '#10b981' },
+  }[s.status];
+
+  return (
+    <>
+      {/* ── Mini swipe card ── */}
+      <div
+        className="relative overflow-hidden cursor-pointer group aspect-[3/4]"
+        style={{ borderRadius: B.radiusLg, border: `1px solid ${B.hairline}` }}
+        onClick={() => setOpen(true)}
+      >
+        {/* Background image */}
+        {displayImg ? (
+          <img src={displayImg || PLACEHOLDER_IMG} alt={s.name} className="absolute inset-0 w-full h-full object-cover" onError={(e) => { (e.target as HTMLImageElement).src = PLACEHOLDER_IMG; }} />
+        ) : (
+          <div className="absolute inset-0" style={{ background: B.canvas }} />
+        )}
+
+        {/* Gradient */}
+        <div className="absolute inset-0" style={{ background: 'linear-gradient(to top, rgba(10,10,10,0.75) 0%, rgba(10,10,10,0.1) 55%, transparent 100%)' }} />
+
+        {/* Hover edit hint */}
+        <div className="absolute inset-0 grid place-items-center opacity-0 group-hover:opacity-100 transition-opacity"
+          style={{ background: 'rgba(35,37,41,0.35)' }}>
+          <div className="font-ui px-4 py-2 rounded-full"
+            style={{ background: B.canvasPure, fontSize: 13, fontWeight: 700, color: B.ink }}>
+            ✎ Chỉnh sửa
+          </div>
+        </div>
+
+        {/* Status dot */}
+        <div className="absolute top-2.5 left-3 flex items-center gap-1.5">
+          <span className="inline-block rounded-full" style={{ width: 8, height: 8, background: statusColors.dot }} />
+          <span className="font-ui px-2 py-0.5 rounded-full"
+            style={{ fontSize: 10, background: statusColors.bg, color: statusColors.fg, fontWeight: 700 }}>
+            {s.status}
+          </span>
+        </div>
+
+        {/* Image count */}
+        {imgs.length > 1 && (
+          <div className="absolute top-2.5 right-3 font-ui px-2 py-0.5 rounded-full"
+            style={{ fontSize: 10, background: 'rgba(0,0,0,0.45)', color: '#fff', backdropFilter: 'blur(4px)' }}>
+            {imgs.length} ảnh
+          </div>
+        )}
+
+        {/* Bottom info */}
+        <div className="absolute inset-x-0 bottom-0 px-3 pb-3">
+          <div className="font-ui mb-0.5" style={{ fontSize: 10, color: 'rgba(255,255,255,0.65)' }}>
+            #{s.locNum} · {s.date !== '—' ? s.date : 'Chưa có ngày'} · km {s.km}
+          </div>
+          <div className="font-display" style={{ fontSize: 15, color: '#fff', lineHeight: 1.2, fontWeight: 700 }}>
+            {s.name}
+          </div>
+          {s.quote && s.quote !== '"..."' && (
+            <div className="font-body italic mt-0.5 line-clamp-1" style={{ fontSize: 11, color: 'rgba(255,255,255,0.75)' }}>
+              {s.quote.replace(/"/g, '')}
+            </div>
+          )}
+        </div>
+      </div>
+
+      {/* ── Edit dialog ── */}
+      {open && (
+        <div className="fixed inset-0 z-50 grid place-items-center px-4"
+          style={{ background: 'rgba(0,0,0,0.5)', backdropFilter: 'blur(6px)' }}
+          onClick={() => setOpen(false)}>
+          <div
+            className="w-full overflow-y-auto"
+            style={{ maxWidth: 560, maxHeight: '90dvh', background: B.canvasPure, borderRadius: B.radiusXl, boxShadow: '0 24px 64px rgba(0,0,0,0.22)' }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            {/* Dialog header with mini card preview */}
+            <div className="relative h-44 overflow-hidden" style={{ borderRadius: `${B.radiusXl}px ${B.radiusXl}px 0 0` }}>
+              <img src={displayImg || PLACEHOLDER_IMG} alt={s.name} className="w-full h-full object-cover" onError={(e) => { (e.target as HTMLImageElement).src = PLACEHOLDER_IMG; }} />
+              <div className="absolute inset-0" style={{ background: 'linear-gradient(to top, rgba(10,10,10,0.7) 0%, transparent 60%)' }} />
+              <div className="absolute inset-x-0 bottom-0 px-5 pb-4">
+                <div className="font-display" style={{ fontSize: 20, color: '#fff', fontWeight: 800 }}>{s.name || 'Địa điểm mới'}</div>
+                <div className="font-ui mt-0.5" style={{ fontSize: 11, color: 'rgba(255,255,255,0.7)' }}>#{s.id} · {s.province}</div>
+              </div>
+              <button onClick={() => setOpen(false)}
+                className="absolute top-3 right-3 grid place-items-center rounded-full"
+                style={{ width: 32, height: 32, background: 'rgba(0,0,0,0.4)', backdropFilter: 'blur(4px)', color: '#fff' }}>
+                <X size={15} strokeWidth={2.5} />
+              </button>
+            </div>
+
+            <div className="p-5 flex flex-col gap-3">
+              {/* Row 1 */}
+              <div className="grid grid-cols-[1fr_88px_110px_100px] gap-2">
+                <Field label="Tên địa điểm">
+                  <TextInput value={s.name} onChange={(e) => onUpdate({ name: e.target.value })} />
+                </Field>
+                <Field label="Km">
+                  <NumInput value={s.km} onChange={(e) => onUpdate({ km: Number(e.target.value) })} />
+                </Field>
+                <Field label="Ngày">
+                  <div className="relative">
+                    <input type="date" value={s.date === '—' ? '' : s.date}
+                      onChange={(e) => onUpdate({ date: e.target.value || '—' })}
+                      className="h-10 w-full pl-3 pr-8 font-ui outline-none rounded"
+                      style={{ ...inputStyle, fontSize: 13 }} />
+                    <CalendarDays size={13} className="absolute right-2 top-1/2 -translate-y-1/2 pointer-events-none" style={{ color: B.inkMuted }} />
+                  </div>
+                </Field>
+                <Field label="Trạng thái">
+                  <StatusButton status={s.status} onChange={(v) => onUpdate({ status: v })} />
+                </Field>
+              </div>
+
+              {/* Quote */}
+              <Field label="Quote hiển thị trên Card">
+                <TextArea value={s.quote} onChange={(e) => onUpdate({ quote: e.target.value })} />
+              </Field>
+
+              {/* Images */}
+              <div>
+                <div className="mb-1.5 flex items-center justify-between">
+                  <span className="font-ui" style={{ fontSize: 12, color: B.inkMuted }}>Ảnh (tối đa 5) — ảnh đầu hiển thị chính</span>
+                  {imgs.filter(Boolean).length < 5 && (
+                    <button
+                      onClick={() => onUpdate({ images: [...imgs, ''] })}
+                      className="h-6 px-2 rounded font-ui inline-flex items-center gap-1"
+                      style={{ background: B.lime, color: B.ink, fontSize: 11, fontWeight: 700 }}>
+                      <Plus size={10} /> Thêm ảnh
+                    </button>
+                  )}
+                </div>
+                <div className="flex flex-col gap-1.5">
+                  {(imgs.length > 0 ? imgs : ['']).map((url, idx) => (
+                    <div key={idx} className="flex gap-2 items-center">
+                      <div className="shrink-0 rounded overflow-hidden" style={{ width: 44, height: 30, background: B.canvas, border: `1px solid ${B.hairline}` }}>
+                        {url
+                          ? <img src={url} alt="" className="w-full h-full object-cover" onError={(e) => { (e.target as HTMLImageElement).src = PLACEHOLDER_IMG; }} />
+                          : <div className="w-full h-full grid place-items-center" style={{ fontSize: 8, color: B.inkSubtle }}>URL</div>}
+                      </div>
+                      <TextInput
+                        value={url}
+                        placeholder={idx === 0 ? (provImg || '(URL ảnh chính)') : '(URL ảnh)'}
+                        onChange={(e) => {
+                          const next = [...(imgs.length > 0 ? imgs : [''])];
+                          next[idx] = e.target.value;
+                          onUpdate({ images: next, image: next[0] || provImg });
+                        }}
+                        style={{ height: 30, fontSize: 11, padding: '0 8px' }}
+                      />
+                      <button
+                        onClick={() => {
+                          const next = (imgs.length > 0 ? imgs : ['']).filter((_, i) => i !== idx);
+                          onUpdate({ images: next, image: next[0] || provImg });
+                        }}
+                        className="h-7 w-7 shrink-0 rounded grid place-items-center"
+                        style={{ background: B.canvas, border: `1px solid ${B.hairline}` }}>
+                        <Trash2 size={11} />
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              {/* Footer */}
+              <div className="flex items-center justify-between pt-2" style={{ borderTop: `1px solid ${B.hairline}` }}>
+                <button onClick={() => { onRemove(); setOpen(false); }}
+                  className="h-9 px-3 rounded font-ui inline-flex items-center gap-1"
+                  style={{ background: B.canvas, border: `1px solid ${B.hairline}`, fontSize: 12, color: B.inkMuted }}>
+                  <Trash2 size={13} /> Xoá địa điểm
+                </button>
+                <button onClick={() => setOpen(false)}
+                  className="h-9 px-5 rounded-full font-ui"
+                  style={{ background: B.ink, color: B.canvasPure, fontSize: 13, fontWeight: 700 }}>
+                  Xong
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+    </>
+  );
+}
+
+function StatusButton({ status, onChange }: { status: 'locked' | 'flagged' | 'visited'; onChange: (s: 'locked' | 'flagged' | 'visited') => void }) {
+  const next = status === 'locked' ? 'flagged' : status === 'flagged' ? 'visited' : 'locked';
+  const colors = {
+    locked:  { bg: '#E5E7EB', fg: '#6B7280' },
+    flagged: { bg: B.lime, fg: B.ink },
+    visited: { bg: '#D1FAE5', fg: '#065F46' },
+  }[status];
+  return (
+    <button onClick={() => onChange(next)} className="h-9 px-2 rounded font-ui"
+      style={{ background: colors.bg, color: colors.fg, fontSize: 12, borderRadius: B.radiusPill, border: `1px solid ${B.hairline}`, padding: '0 12px' }}>
+      {status}
+    </button>
+  );
+}
+
+function DataSection({ draft, setDraft }: SP) {
+  const [text, setText] = useState('');
+  const exportJson = () => {
+    const blob = new Blob([JSON.stringify(draft, null, 2)], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url; a.download = `lao-tao-settings-${Date.now()}.json`; a.click();
+    URL.revokeObjectURL(url);
+  };
+  const importJson = () => {
+    try {
+      const parsed = JSON.parse(text);
+      setDraft({ ...DEFAULT_SETTINGS, ...parsed });
+      alert('Đã nạp dữ liệu vào draft. Bấm Lưu để áp dụng.');
+    } catch (e) {
+      alert('JSON không hợp lệ: ' + (e as Error).message);
+    }
+  };
+  return (
+    <>
+      <SectionTitle hint="Xuất / nạp toàn bộ cấu hình bằng JSON.">Import / Export</SectionTitle>
+      <Card>
+        <button onClick={exportJson} className="h-9 px-3 rounded font-ui inline-flex items-center gap-1"
+          style={{ background: B.ink, color: B.canvasPure, fontSize: 13, fontWeight: 700 }}>
+          <Download size={14} /> Xuất JSON
+        </button>
+      </Card>
+      <Card>
+        <Field label="Dán JSON cấu hình vào đây">
+          <TextArea value={text} onChange={(e) => setText(e.target.value)} style={{ minHeight: 200, fontFamily: 'ui-monospace, monospace' }} />
+        </Field>
+        <button onClick={importJson} className="h-9 px-3 rounded font-ui inline-flex items-center gap-1"
+          style={{ background: B.canvas, border: `1px solid ${B.hairline}`, fontSize: 13, fontWeight: 700 }}>
+          <Upload size={14} /> Nạp vào draft
+        </button>
+      </Card>
+    </>
+  );
+}
+
+const CAT_COLORS = ['#FF631F','#F59E0B','#10B981','#3B82F6','#8B5CF6','#EC4899','#06B6D4','#64748B'];
+
+function VideosSection({ draft, setDraft }: SP) {
+  const [fetching, setFetching] = useState<Set<number>>(new Set());
+  const [editingId, setEditingId] = useState<number | null>(null);
+  const draftRef = useRef(draft);
+  useEffect(() => { draftRef.current = draft; }, [draft]);
+
+  const cats: VideoCategory[] = draft.videoCategories ?? [];
+
+  const getYtId = (url: string) => url.match(/(?:v=|youtu\.be\/|shorts\/)([^&?/\s]+)/)?.[1] ?? null;
+  const patchVideos = (d: typeof draft, id: number, patch: Partial<VideoItem>) =>
+    ({ ...d, videos: d.videos.map((v) => v.id === id ? { ...v, ...patch } : v) });
+
+  const update = (id: number, patch: Partial<VideoItem>) => {
+    setDraft(patchVideos(draftRef.current, id, patch));
+    if ('categoryId' in patch) patchVideo(id, { categoryId: patch.categoryId });
+  };
+  const remove = (id: number) => {
+    if (!confirm('Xoá video này?')) return;
+    setDraft({ ...draftRef.current, videos: draftRef.current.videos.filter((v) => v.id !== id) });
+  };
+  const add = () => {
+    const d = draftRef.current;
+    const nextId = d.videos.reduce((m, v) => Math.max(m, v.id), 0) + 1;
+    setDraft({ ...d, videos: [...d.videos, { id: nextId, url: '', title: '', place: '', date: '', quote: '', image: '' }] });
+  };
+  const handleUrlChange = async (id: number, url: string) => {
+    const ytId = getYtId(url.trim());
+    // Always update URL immediately using latest ref
+    setDraft(patchVideos(draftRef.current, id, {
+      url: url.trim(),
+      image: ytId ? `https://i.ytimg.com/vi/${ytId}/hqdefault.jpg` : '',
+    }));
+    if (!ytId) return;
+    setFetching(prev => new Set(prev).add(id));
+    try {
+      // noembed: reliable title + thumbnail
+      const [noembedRes, proxyRes] = await Promise.allSettled([
+        fetch(`https://noembed.com/embed?url=https://www.youtube.com/watch?v=${ytId}`),
+        fetch(`https://api.allorigins.win/get?url=${encodeURIComponent(`https://www.youtube.com/watch?v=${ytId}`)}`),
+      ]);
+
+      const patch: Partial<VideoItem> = {};
+
+      if (noembedRes.status === 'fulfilled') {
+        const nd = await noembedRes.value.json();
+        if (nd.title) patch.title = nd.title;
+        if (nd.thumbnail_url) patch.image = nd.thumbnail_url;
+      }
+
+      if (proxyRes.status === 'fulfilled') {
+        const pd = await proxyRes.value.json();
+        const html: string = pd.contents ?? '';
+        const dateMatch = html.match(/"uploadDate":"(\d{4}-\d{2}-\d{2})"/);
+        const descMatch = html.match(/"shortDescription":"((?:[^"\\]|\\.)*)"/);
+        if (dateMatch) {
+          const d = new Date(dateMatch[1]);
+          patch.date = `${String(d.getDate()).padStart(2, '0')}.${String(d.getMonth() + 1).padStart(2, '0')}`;
+        }
+        if (descMatch) {
+          const raw = descMatch[1].replace(/\\n/g, ' ').replace(/\\"/g, '"').replace(/\\\\/g, '\\').trim();
+          patch.quote = raw.slice(0, 120) + (raw.length > 120 ? '...' : '');
+        }
+      }
+
+      setDraft(patchVideos(draftRef.current, id, patch));
+    } catch { /* keep existing */ }
+    finally { setFetching(prev => { const s = new Set(prev); s.delete(id); return s; }); }
+  };
+  return (
+    <>
+      <SectionTitle hint="Video sẽ hiển thị ở tab Bảng Tin theo thứ tự từ trên xuống. Paste link YouTube để tự động điền thông tin.">Nội Dung</SectionTitle>
+
+      <div className="grid grid-cols-3 gap-4 mb-4">
+        {draft.videos.map((v) => {
+          const ytId = getYtId(v.url);
+          const isFetching = fetching.has(v.id);
+          return (
+            <React.Fragment key={v.id}>
+            <article
+              className="cursor-pointer group overflow-hidden"
+              style={{ background: B.canvasPure, border: `1px solid ${B.hairline}`, borderRadius: B.radiusLg }}
+              onClick={() => setEditingId(v.id)}
+            >
+              {/* Thumbnail — aspect-video like FeedTab */}
+              <div className="relative aspect-video overflow-hidden">
+                {ytId
+                  ? <img src={`https://i.ytimg.com/vi/${ytId}/hqdefault.jpg`} alt="thumb" className="w-full h-full object-cover" onError={(e) => { (e.target as HTMLImageElement).src = PLACEHOLDER_IMG; }} />
+                  : <img src={PLACEHOLDER_IMG} alt="thumb" className="w-full h-full object-cover" />
+                }
+                {isFetching && (
+                  <div className="absolute inset-0 grid place-items-center" style={{ background: 'rgba(255,255,255,0.65)' }}>
+                    <div className="font-ui" style={{ fontSize: 11, color: B.inkMuted }}>Đang tải...</div>
+                  </div>
+                )}
+                <div className="absolute inset-x-0 bottom-0 h-1/2" style={{ background: 'linear-gradient(to top, rgba(17,17,17,0.55), transparent)' }} />
+                {/* ▶ badge + category */}
+                <div className="absolute bottom-2 left-2.5 flex items-center gap-1.5">
+                  <div className="inline-flex items-center gap-1 px-2 py-0.5 rounded font-ui"
+                    style={{ background: 'rgba(0,0,0,0.55)', color: '#fff', fontSize: 10, fontWeight: 600 }}>
+                    ▶ Video
+                  </div>
+                  {(() => { const cat = cats.find(c => c.id === v.categoryId); return cat ? (
+                    <div className="px-2 py-0.5 rounded font-ui"
+                      style={{ background: cat.color, color: '#fff', fontSize: 10, fontWeight: 700 }}>
+                      {cat.name}
+                    </div>
+                  ) : null; })()}
+                </div>
+                {/* Hover overlay */}
+                <div className="absolute inset-0 grid place-items-center opacity-0 group-hover:opacity-100 transition-opacity"
+                  style={{ background: 'rgba(35,37,41,0.3)' }}>
+                  <div className="font-ui px-3 py-1.5 rounded-full"
+                    style={{ background: B.canvasPure, fontSize: 12, fontWeight: 700, color: B.ink }}>
+                    ✎ Chỉnh sửa
+                  </div>
+                </div>
+                {/* Delete */}
+                <button
+                  onClick={(e) => { e.stopPropagation(); remove(v.id); }}
+                  className="absolute top-2 right-2 grid place-items-center rounded-full opacity-0 group-hover:opacity-100 transition-opacity"
+                  style={{ width: 26, height: 26, background: 'rgba(0,0,0,0.5)', backdropFilter: 'blur(4px)', color: '#fff' }}
+                >
+                  <Trash2 size={10} />
+                </button>
+              </div>
+
+              {/* Info below — same structure as FeedTab */}
+              <div className="p-3">
+                <div className="font-ui" style={{ fontSize: 10, letterSpacing: '0.06em', color: B.inkSubtle }}>
+                  {[v.place?.toUpperCase(), v.date].filter(Boolean).join(' · ') || '—'}
+                </div>
+                <div className="font-display mt-0.5" style={{ fontSize: 14, lineHeight: 1.25, color: v.title ? B.ink : B.inkSubtle, fontStyle: v.title ? 'normal' : 'italic' }}>
+                  {v.title || 'Chưa có tiêu đề'}
+                </div>
+                {v.quote && (
+                  <p className="font-body italic mt-0.5 line-clamp-2" style={{ fontSize: 12, color: B.inkMuted }}>{v.quote}</p>
+                )}
+              </div>
+            </article>
+
+            {/* Edit modal */}
+            {editingId === v.id && (
+              <div className="fixed inset-0 z-50 grid place-items-center px-4"
+                style={{ background: 'rgba(0,0,0,0.4)' }}
+                onClick={() => setEditingId(null)}>
+                <div className="w-full max-w-lg rounded-xl overflow-hidden"
+                  style={{ background: B.canvasPure, maxHeight: '90dvh', overflowY: 'auto' }}
+                  onClick={(e) => e.stopPropagation()}>
+                  <div className="flex items-center justify-between px-4 py-3" style={{ borderBottom: `1px solid ${B.hairline}` }}>
+                    <span className="font-ui" style={{ fontSize: 14, fontWeight: 700 }}>Chỉnh sửa video</span>
+                    <button onClick={() => setEditingId(null)} className="h-7 w-7 rounded grid place-items-center"
+                      style={{ background: B.canvas, border: `1px solid ${B.hairline}` }}>
+                      <span style={{ fontSize: 16, lineHeight: 1, color: B.inkMuted }}>×</span>
+                    </button>
+                  </div>
+                  <div className="p-4 flex flex-col gap-3">
+                    <Field label="YouTube URL">
+                      <TextInput value={v.url} placeholder="https://youtube.com/watch?v=..."
+                        onChange={(e) => handleUrlChange(v.id, e.target.value)} />
+                    </Field>
+                    <Field label="Tiêu đề">
+                      <TextInput value={v.title} onChange={(e) => update(v.id, { title: e.target.value })} />
+                    </Field>
+                    <div className="grid grid-cols-2 gap-3">
+                      <Field label="Địa điểm">
+                        <TextInput value={v.place} onChange={(e) => update(v.id, { place: e.target.value })} />
+                      </Field>
+                      <Field label="Ngày">
+                        <div className="relative">
+                          <input type="date"
+                            value={(() => {
+                              const parts = v.date?.split('.');
+                              if (parts?.length === 2) return `${new Date().getFullYear()}-${parts[1].padStart(2,'0')}-${parts[0].padStart(2,'0')}`;
+                              return new Date().toISOString().split('T')[0];
+                            })()}
+                            onChange={(e) => {
+                              if (!e.target.value) return;
+                              const [, mm, dd] = e.target.value.split('-');
+                              update(v.id, { date: `${dd}.${mm}` });
+                            }}
+                            className="h-10 w-full pl-4 pr-9 font-ui outline-none rounded"
+                            style={{ ...inputStyle, fontSize: 14 }} />
+                          <CalendarDays size={14} className="absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none" style={{ color: B.inkMuted }} />
+                        </div>
+                      </Field>
+                    </div>
+                    <Field label="Danh mục">
+                      <select value={v.categoryId ?? ''}
+                        onChange={e => update(v.id, { categoryId: e.target.value ? Number(e.target.value) : undefined })}
+                        className="h-10 w-full pl-4 pr-3 font-ui outline-none rounded"
+                        style={{ ...inputStyle, fontSize: 14 }}>
+                        <option value="">— Không có danh mục —</option>
+                        {cats.map(cat => (
+                          <option key={cat.id} value={cat.id}>{cat.name}</option>
+                        ))}
+                      </select>
+                    </Field>
+                    <Field label="Quote">
+                      <TextArea value={v.quote} onChange={(e) => update(v.id, { quote: e.target.value })} />
+                    </Field>
+                    {ytId && (
+                      <img src={`https://i.ytimg.com/vi/${ytId}/hqdefault.jpg`} alt="thumb"
+                        className="w-full rounded-lg object-cover" style={{ maxHeight: 180 }} />
+                    )}
+                  </div>
+                  <div className="px-4 pb-4 flex justify-end gap-2">
+                    <button onClick={() => setEditingId(null)}
+                      className="h-9 px-4 rounded font-ui"
+                      style={{ background: B.lime, fontSize: 13, fontWeight: 700, color: B.ink }}>
+                      Xong
+                    </button>
+                  </div>
+                </div>
+              </div>
+            )}
+            </React.Fragment>
+          );
+        })}
+        {draft.videos.length === 0 && (
+          <div className="font-ui py-6 text-center" style={{ fontSize: 13, color: B.inkSubtle }}>Chưa có video nào</div>
+        )}
+      </div>
+      <button onClick={add} className="h-9 px-3 rounded font-ui inline-flex items-center gap-1"
+        style={{ background: B.ink, color: B.canvasPure, fontSize: 12, fontWeight: 700 }}>
+        <Plus size={14} /> Thêm video
+      </button>
+    </>
+  );
+}
+
+function CategoriesSection({ draft, setDraft }: SP) {
+  const [editingId, setEditingId] = useState<number | null>(null);
+  const [newName, setNewName] = useState('');
+  const [newColor, setNewColor] = useState(CAT_COLORS[0]);
+
+  const cats: VideoCategory[] = draft.videoCategories ?? [];
+
+  const videoCountFor = (catId: number) => draft.videos.filter(v => v.categoryId === catId).length;
+
+  const add = () => {
+    const name = newName.trim();
+    if (!name) return;
+    const nextId = cats.reduce((m, c) => Math.max(m, c.id), 0) + 1;
+    const nc: VideoCategory = { id: nextId, name, color: newColor };
+    setDraft({ ...draft, videoCategories: [...cats, nc] });
+    createCategory({ name, color: newColor });
+    setNewName('');
+    setNewColor(CAT_COLORS[(cats.length + 1) % CAT_COLORS.length]);
+  };
+
+  const remove = (id: number) => {
+    if (!confirm('Xoá danh mục? Các video thuộc danh mục này sẽ bị bỏ liên kết.')) return;
+    setDraft({
+      ...draft,
+      videoCategories: cats.filter(c => c.id !== id),
+      videos: draft.videos.map(v => v.categoryId === id ? { ...v, categoryId: undefined } : v),
+    });
+    deleteCategory(id);
+    if (editingId === id) setEditingId(null);
+  };
+
+  const updateName = (id: number, name: string) =>
+    setDraft({ ...draft, videoCategories: cats.map(c => c.id === id ? { ...c, name } : c) });
+
+  const saveName = (id: number, name: string) => {
+    patchCategory(id, { name });
+    setEditingId(null);
+  };
+
+  const updateColor = (id: number, color: string) => {
+    setDraft({ ...draft, videoCategories: cats.map(c => c.id === id ? { ...c, color } : c) });
+    patchCategory(id, { color });
+  };
+
+  return (
+    <>
+      <SectionTitle hint="Danh mục dùng để phân loại video ở Tab Bảng Tin. Bấm tên để đổi, bấm màu để chọn màu hiển thị.">Danh Mục</SectionTitle>
+
+      {/* Add form */}
+      <div className="flex gap-2 mb-5 items-center">
+        <div className="relative shrink-0" style={{ width: 36, height: 36 }}>
+          <div className="w-9 h-9 rounded-lg cursor-pointer border" style={{ background: newColor, borderColor: B.hairline }} />
+          <input type="color" value={newColor} onChange={e => setNewColor(e.target.value)}
+            className="absolute inset-0 opacity-0 cursor-pointer w-full h-full" />
+        </div>
+        <TextInput placeholder="Tên danh mục mới..."
+          value={newName} onChange={e => setNewName(e.target.value)}
+          onKeyDown={(e: React.KeyboardEvent) => { if (e.key === 'Enter') add(); }} />
+        <button onClick={add} disabled={!newName.trim()}
+          className="h-10 px-4 rounded font-ui shrink-0 inline-flex items-center gap-1"
+          style={{
+            background: newName.trim() ? B.ink : B.canvas,
+            color: newName.trim() ? B.canvasPure : B.inkSubtle,
+            border: `1px solid ${B.hairline}`, fontSize: 13, fontWeight: 700,
+            cursor: newName.trim() ? 'pointer' : 'not-allowed',
+          }}>
+          <Plus size={13} /> Tạo
+        </button>
+      </div>
+
+      {/* Category list */}
+      {cats.length === 0 ? (
+        <div className="py-10 text-center font-ui" style={{ fontSize: 14, color: B.inkSubtle }}>
+          Chưa có danh mục nào. Tạo danh mục đầu tiên ở trên.
+        </div>
+      ) : (
+        <div className="rounded-lg overflow-hidden" style={{ border: `1px solid ${B.hairline}` }}>
+          <div className="grid px-4 py-2 font-ui"
+            style={{ gridTemplateColumns: '40px 1fr 80px 80px', background: B.canvas, fontSize: 11, fontWeight: 700, color: B.inkMuted }}>
+            <div>Màu</div><div>Tên danh mục</div><div className="text-center">Video</div><div></div>
+          </div>
+          {cats.map(cat => (
+            <div key={cat.id} className="grid px-4 py-2 items-center gap-2"
+              style={{ gridTemplateColumns: '40px 1fr 80px 80px', borderTop: `1px solid ${B.hairline}` }}>
+              {/* Color picker */}
+              <div className="relative" style={{ width: 28, height: 28 }}>
+                <div className="w-7 h-7 rounded-md cursor-pointer"
+                  style={{ background: cat.color, boxShadow: `0 0 0 2px ${cat.color}44` }} />
+                <input type="color" value={cat.color} onChange={e => updateColor(cat.id, e.target.value)}
+                  className="absolute inset-0 opacity-0 cursor-pointer w-full h-full" />
+              </div>
+
+              {/* Editable name */}
+              {editingId === cat.id ? (
+                <input autoFocus value={cat.name}
+                  onChange={e => updateName(cat.id, e.target.value)}
+                  onBlur={e => saveName(cat.id, e.target.value)}
+                  onKeyDown={(e: React.KeyboardEvent<HTMLInputElement>) => {
+                    if (e.key === 'Enter') saveName(cat.id, (e.target as HTMLInputElement).value);
+                    if (e.key === 'Escape') setEditingId(null);
+                  }}
+                  className="h-9 w-full px-3 font-ui outline-none rounded"
+                  style={{ ...inputStyle, fontSize: 13, fontWeight: 600 }} />
+              ) : (
+                <div className="flex items-center gap-2">
+                  <div className="px-2.5 py-0.5 rounded-full font-ui inline-block"
+                    style={{ background: cat.color + '22', border: `1px solid ${cat.color}55`, fontSize: 13, fontWeight: 600, color: cat.color }}>
+                    {cat.name}
+                  </div>
+                  <button onClick={() => setEditingId(cat.id)} className="opacity-50 hover:opacity-100 transition-opacity"
+                    style={{ fontSize: 13, color: B.inkMuted }}>✎</button>
+                </div>
+              )}
+
+              {/* Video count */}
+              <div className="text-center font-ui" style={{ fontSize: 13, color: B.inkMuted }}>
+                {videoCountFor(cat.id)} video
+              </div>
+
+              {/* Delete */}
+              <div className="flex justify-end">
+                <button onClick={() => remove(cat.id)} className="h-8 w-8 rounded grid place-items-center"
+                  style={{ background: B.canvas, border: `1px solid ${B.hairline}` }}>
+                  <Trash2 size={13} style={{ color: B.inkMuted }} />
+                </button>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+    </>
+  );
+}
+
+function SecuritySection() {
+  const settings = useSettings();
+  const [cur, setCur] = useState('');
+  const [pw1, setPw1] = useState('');
+  const [pw2, setPw2] = useState('');
+  const [msg, setMsg] = useState<{ kind: 'ok' | 'err'; text: string } | null>(null);
+  const hasPw = !!settings.admin.passwordHash;
+  const submit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setMsg(null);
+    const ok = await verifyPassword(cur);
+    if (!ok) return setMsg({ kind: 'err', text: 'Mật khẩu hiện tại sai.' });
+    if (pw1.length < 4) return setMsg({ kind: 'err', text: 'Mật khẩu mới ≥ 4 ký tự.' });
+    if (pw1 !== pw2) return setMsg({ kind: 'err', text: 'Xác nhận mật khẩu không khớp.' });
+    await setPassword(pw1);
+    setCur(''); setPw1(''); setPw2('');
+    setMsg({ kind: 'ok', text: 'Đã đổi mật khẩu.' });
+  };
+  return (
+    <>
+      <SectionTitle hint={hasPw ? 'Đổi mật khẩu admin.' : 'Mật khẩu mặc định là "admin". Đặt mật khẩu mới ngay.'}>
+        Bảo Mật
+      </SectionTitle>
+      <Card>
+        <form onSubmit={submit}>
+          <Field label="Mật khẩu hiện tại">
+            <TextInput type="password" value={cur} onChange={(e) => setCur(e.target.value)} />
+          </Field>
+          <Field label="Mật khẩu mới">
+            <TextInput type="password" value={pw1} onChange={(e) => setPw1(e.target.value)} />
+          </Field>
+          <Field label="Xác nhận mật khẩu mới">
+            <TextInput type="password" value={pw2} onChange={(e) => setPw2(e.target.value)} />
+          </Field>
+          {msg && (
+            <div className="font-ui mb-2" style={{ fontSize: 12, color: msg.kind === 'ok' ? B.ink : B.orange }}>
+              {msg.text}
+            </div>
+          )}
+          <button type="submit" className="h-9 px-3 rounded font-ui"
+            style={{ background: B.ink, color: B.canvasPure, fontSize: 13, fontWeight: 700 }}>
+            Đổi mật khẩu
+          </button>
+        </form>
+        <div className="font-ui mt-3" style={{ fontSize: 11, color: B.inkMuted }}>
+          Lưu ý: mật khẩu hash SHA-256 lưu trong localStorage trình duyệt. Chỉ phù hợp bảo vệ nhẹ, không thay thế xác thực server-side.
+        </div>
+      </Card>
+    </>
+  );
+}
+
+type MakeLocation = {
+  id: number;
+  province_name: string;
+  location_name: string;
+  lat: number;
+  lng: number;
+  episode: number;
+  region: 'north' | 'central' | 'south';
+  km: number;
+  date: string;
+  quote: string;
+  image_url: string;
+  status: 'draft' | 'published';
+  created_at: string;
+};
+
+function ImportMakeSection({ draft, setDraft }: SP) {
+  const [loading, setLoading] = useState(false);
+  const [locations, setLocations] = useState<MakeLocation[]>([]);
+  const [error, setError] = useState('');
+  const [selected, setSelected] = useState<Set<number>>(new Set());
+
+  useEffect(() => {
+    fetchDraftLocations();
+  }, []);
+
+  const fetchDraftLocations = async () => {
+    setLoading(true);
+    setError('');
+    try {
+      const res = await fetch(
+        `https://${projectId}.supabase.co/rest/v1/locations?status=eq.draft&select=*`,
+        {
+          headers: {
+            apikey: publicAnonKey,
+            Authorization: `Bearer ${publicAnonKey}`,
+          },
+        }
+      );
+      if (!res.ok) throw new Error(`HTTP ${res.status}: ${await res.text()}`);
+      const data = await res.json();
+      setLocations(data || []);
+    } catch (err) {
+      setError(String(err));
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const toggleSelect = (id: number) => {
+    const next = new Set(selected);
+    if (next.has(id)) next.delete(id);
+    else next.add(id);
+    setSelected(next);
+  };
+
+  const selectAll = () => {
+    if (selected.size === locations.length) setSelected(new Set());
+    else setSelected(new Set(locations.map((l) => l.id)));
+  };
+
+  const importSelected = () => {
+    if (selected.size === 0) {
+      alert('Chọn ít nhất 1 địa điểm để import.');
+      return;
+    }
+    const toImport = locations.filter((l) => selected.has(l.id));
+    // TODO: Map Make locations → draft.provinces + draft.subLocations
+    alert(`Sẽ import ${toImport.length} địa điểm (chưa implement logic merge)`);
+  };
+
+  return (
+    <>
+      <SectionTitle hint="Nhập dữ liệu địa điểm từ Make.com webhook (bảng locations, status=draft).">
+        Import Make
+      </SectionTitle>
+      <Card>
+        <div className="flex items-center justify-between mb-4">
+          <div className="flex items-center gap-2">
+            <Workflow size={16} color={B.orange} />
+            <span className="font-ui" style={{ fontSize: 14, fontWeight: 600 }}>
+              Dữ liệu Draft từ Supabase
+            </span>
+          </div>
+          <button
+            onClick={fetchDraftLocations}
+            disabled={loading}
+            className="h-8 px-3 rounded font-ui inline-flex items-center gap-1"
+            style={{
+              background: B.canvas,
+              border: `1px solid ${B.hairline}`,
+              fontSize: 12,
+              opacity: loading ? 0.6 : 1,
+            }}
+          >
+            <RotateCcw size={12} /> {loading ? 'Đang tải...' : 'Refresh'}
+          </button>
+        </div>
+
+        {error && (
+          <div
+            className="px-3 py-2 mb-3 rounded font-ui"
+            style={{ background: '#FEE2E2', color: '#991B1B', fontSize: 12, borderRadius: B.radiusSm }}
+          >
+            ⚠ {error}
+          </div>
+        )}
+
+        {!loading && locations.length === 0 && !error && (
+          <div className="text-center py-8" style={{ color: B.inkMuted, fontSize: 13 }}>
+            Không có địa điểm draft nào trong Supabase.
+          </div>
+        )}
+
+        {locations.length > 0 && (
+          <>
+            <div className="flex gap-2 mb-3">
+              <button
+                onClick={selectAll}
+                className="h-8 px-3 rounded font-ui"
+                style={{ background: B.lime, fontSize: 12, fontWeight: 700 }}
+              >
+                {selected.size === locations.length ? 'Bỏ chọn tất cả' : 'Chọn tất cả'}
+              </button>
+              <button
+                onClick={importSelected}
+                disabled={selected.size === 0}
+                className="h-8 px-3 rounded font-ui"
+                style={{
+                  background: selected.size > 0 ? B.ink : B.canvas,
+                  color: selected.size > 0 ? B.canvasPure : B.inkSubtle,
+                  fontSize: 12,
+                  fontWeight: 700,
+                }}
+              >
+                Import {selected.size > 0 && `(${selected.size})`}
+              </button>
+            </div>
+
+            <div className="rounded-lg overflow-hidden" style={{ border: `1px solid ${B.hairline}` }}>
+              <div
+                className="grid gap-2 px-3 py-2 font-ui"
+                style={{
+                  gridTemplateColumns: '40px 60px 1fr 1fr 60px 80px 80px',
+                  background: B.canvas,
+                  fontSize: 11,
+                  fontWeight: 700,
+                  color: B.inkMuted,
+                }}
+              >
+                <div></div>
+                <div>ID</div>
+                <div>Tỉnh</div>
+                <div>Địa điểm</div>
+                <div>Ep</div>
+                <div>Region</div>
+                <div>Km</div>
+              </div>
+              {locations.map((loc) => (
+                <div
+                  key={loc.id}
+                  className="grid gap-2 px-3 py-2 items-center"
+                  style={{
+                    gridTemplateColumns: '40px 60px 1fr 1fr 60px 80px 80px',
+                    borderTop: `1px solid ${B.hairline}`,
+                    background: selected.has(loc.id) ? '#FFFBEB' : 'transparent',
+                  }}
+                >
+                  <input
+                    type="checkbox"
+                    checked={selected.has(loc.id)}
+                    onChange={() => toggleSelect(loc.id)}
+                  />
+                  <div className="font-ui" style={{ fontSize: 12 }}>
+                    {loc.id}
+                  </div>
+                  <div className="font-ui truncate" style={{ fontSize: 12 }}>
+                    {loc.province_name}
+                  </div>
+                  <div className="font-ui truncate" style={{ fontSize: 12 }}>
+                    {loc.location_name}
+                  </div>
+                  <div className="font-ui" style={{ fontSize: 12 }}>
+                    {loc.episode}
+                  </div>
+                  <div className="font-ui" style={{ fontSize: 12 }}>
+                    {loc.region}
+                  </div>
+                  <div className="font-ui" style={{ fontSize: 12 }}>
+                    {loc.km}
+                  </div>
+                </div>
+              ))}
+            </div>
+          </>
+        )}
+      </Card>
+    </>
+  );
+}
