@@ -1,7 +1,10 @@
 import { Hono } from "npm:hono";
 import { cors } from "npm:hono/cors";
 import { logger } from "npm:hono/logger";
+import { createClient } from "jsr:@supabase/supabase-js@2.49.8";
 import * as kv from "./kv_store.tsx";
+
+const BUCKET = "location-images";
 
 const app = new Hono();
 
@@ -22,7 +25,11 @@ const SETTINGS_KEY = "lao-tao:settings";
 function checkAdmin(c: any): Response | null {
   const required = Deno.env.get("ADMIN_TOKEN") ?? "";
   if (!required) return null;
-  const provided = c.req.header("x-admin-token") ?? "";
+  // Accept token from header OR query param (query param avoids CORS preflight issues)
+  const provided =
+    c.req.header("x-admin-token") ||
+    c.req.query("adminToken") ||
+    "";
   if (provided !== required) return c.json({ error: "Unauthorized: bad admin token" }, 401) as any;
   return null;
 }
@@ -188,6 +195,157 @@ app.delete("/make-server-ae2dcaa6/sublocations/:id", async (c) => {
     if (settings.subLocations.length === before) return c.json({ error: "SubLocation not found" }, 404);
     await kv.set(SETTINGS_KEY, settings);
     return c.json({ ok: true });
+  } catch (err) {
+    return c.json({ error: String(err) }, 500);
+  }
+});
+
+// ── Image upload → Supabase Storage ──────────────────────────────────────────
+
+// POST /upload  — admin; accepts { data: base64, filename?, contentType? }
+app.post("/make-server-ae2dcaa6/upload", async (c) => {
+  try {
+    const authErr = checkAdmin(c);
+    if (authErr) return authErr;
+
+    const body = await c.req.json();
+    if (!body?.data) return c.json({ error: "data is required" }, 400);
+
+    const supabase = createClient(
+      Deno.env.get("SUPABASE_URL")!,
+      Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!,
+    );
+
+    // Ensure bucket exists (idempotent)
+    await supabase.storage.createBucket(BUCKET, { public: true }).catch(() => {});
+
+    // Decode base64 → bytes
+    const raw: string = body.data;
+    const b64 = raw.includes(",") ? raw.split(",")[1] : raw;
+    const bytes = Uint8Array.from(atob(b64), (ch) => ch.charCodeAt(0));
+
+    const ext = (body.contentType ?? "image/jpeg").includes("png") ? "png" : "jpg";
+    const name = `${Date.now()}-${(body.filename ?? `img.${ext}`).replace(/[^a-zA-Z0-9._-]/g, "_")}`;
+
+    const { data: uploaded, error } = await supabase.storage
+      .from(BUCKET)
+      .upload(name, bytes, { contentType: body.contentType ?? "image/jpeg", upsert: false });
+
+    if (error) return c.json({ error: error.message }, 500);
+
+    const { data: urlData } = supabase.storage.from(BUCKET).getPublicUrl(uploaded.path);
+    return c.json({ url: urlData.publicUrl });
+  } catch (err) {
+    return c.json({ error: String(err) }, 500);
+  }
+});
+
+// ── Trip ─────────────────────────────────────────────────────────────────────
+
+// GET /trip  — public
+app.get("/make-server-ae2dcaa6/trip", async (c) => {
+  try {
+    const settings = await kv.get(SETTINGS_KEY);
+    return c.json({ trip: settings?.trip ?? null });
+  } catch (err) {
+    return c.json({ error: String(err) }, 500);
+  }
+});
+
+// PATCH /trip  — admin; update totalKm and/or currentKm
+app.patch("/make-server-ae2dcaa6/trip", async (c) => {
+  try {
+    const authErr = checkAdmin(c);
+    if (authErr) return authErr;
+    const body = await c.req.json();
+    const settings = await kv.get(SETTINGS_KEY);
+    if (!settings) return c.json({ error: "Settings not found" }, 404);
+    const patch: Record<string, any> = {};
+    if (typeof body.totalKm === "number") patch.totalKm = body.totalKm;
+    if (typeof body.currentKm === "number") patch.currentKm = body.currentKm;
+    settings.trip = { ...(settings.trip ?? {}), ...patch };
+    await kv.set(SETTINGS_KEY, settings);
+    return c.json({ trip: settings.trip });
+  } catch (err) {
+    return c.json({ error: String(err) }, 500);
+  }
+});
+
+// ── Header ────────────────────────────────────────────────────────────────────
+
+// GET /header  — public
+app.get("/make-server-ae2dcaa6/header", async (c) => {
+  try {
+    const settings = await kv.get(SETTINGS_KEY);
+    return c.json({ header: settings?.header ?? null });
+  } catch (err) {
+    return c.json({ error: String(err) }, 500);
+  }
+});
+
+// PATCH /header  — admin; update currentStop, avatarText, typewriterNames
+app.patch("/make-server-ae2dcaa6/header", async (c) => {
+  try {
+    const authErr = checkAdmin(c);
+    if (authErr) return authErr;
+    const body = await c.req.json();
+    const settings = await kv.get(SETTINGS_KEY);
+    if (!settings) return c.json({ error: "Settings not found" }, 404);
+    const allowed = ["currentStop", "avatarText", "typewriterNames"];
+    const patch: Record<string, any> = {};
+    for (const key of allowed) {
+      if (key in body) patch[key] = body[key];
+    }
+    settings.header = { ...(settings.header ?? {}), ...patch };
+    await kv.set(SETTINGS_KEY, settings);
+    return c.json({ header: settings.header });
+  } catch (err) {
+    return c.json({ error: String(err) }, 500);
+  }
+});
+
+// ── Ví Point ──────────────────────────────────────────────────────────────────
+
+// GET /vi-point  — public; returns current balance
+app.get("/make-server-ae2dcaa6/vi-point", async (c) => {
+  try {
+    const settings = await kv.get(SETTINGS_KEY);
+    const balance = settings?.viPoint ?? settings?.initialPoints ?? 0;
+    return c.json({ balance });
+  } catch (err) {
+    return c.json({ error: String(err) }, 500);
+  }
+});
+
+// PATCH /vi-point  — admin; set wallet balance
+app.patch("/make-server-ae2dcaa6/vi-point", async (c) => {
+  try {
+    const authErr = checkAdmin(c);
+    if (authErr) return authErr;
+    const body = await c.req.json();
+    if (typeof body.balance !== "number") return c.json({ error: "balance must be a number" }, 400);
+    const settings = await kv.get(SETTINGS_KEY);
+    if (!settings) return c.json({ error: "Settings not found" }, 404);
+    settings.viPoint = body.balance;
+    await kv.set(SETTINGS_KEY, settings);
+    return c.json({ balance: settings.viPoint });
+  } catch (err) {
+    return c.json({ error: String(err) }, 500);
+  }
+});
+
+// POST /vi-point/add  — public; add earned points from mini games
+app.post("/make-server-ae2dcaa6/vi-point/add", async (c) => {
+  try {
+    const body = await c.req.json();
+    const amount = Number(body.amount);
+    if (!amount || amount < 0) return c.json({ error: "amount must be a positive number" }, 400);
+    const settings = await kv.get(SETTINGS_KEY);
+    if (!settings) return c.json({ error: "Settings not found" }, 404);
+    const prev = settings.viPoint ?? settings.initialPoints ?? 0;
+    settings.viPoint = prev + amount;
+    await kv.set(SETTINGS_KEY, settings);
+    return c.json({ balance: settings.viPoint, added: amount });
   } catch (err) {
     return c.json({ error: String(err) }, 500);
   }

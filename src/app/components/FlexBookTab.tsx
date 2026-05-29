@@ -41,7 +41,6 @@ export function FlexBookTab({ flagged, points }: { flagged: Set<number>; points:
 
         <div className="grid grid-cols-3 mt-5">
           <Stat label="Cắm Cờ" value={totalFlagged} accent icon={<Flag size={11} strokeWidth={2.5} />} />
-          <Stat label="Danh Hiệu" value={earnedBadges} divider icon={<Award size={11} strokeWidth={2} />} />
           <Stat label="Flex Điểm" value={points} accent icon={<Zap size={11} strokeWidth={2.5} />} />
         </div>
       </div>
@@ -59,39 +58,7 @@ export function FlexBookTab({ flagged, points }: { flagged: Set<number>; points:
         </div>
       </section>
 
-      {/* Badge Collection */}
-      <section>
-        <div className="font-ui mb-2" style={{ fontSize: 11, letterSpacing: '0.06em', color: 'var(--text-secondary)' }}>
-          DANH HIỆU ({earnedBadges}/{BADGES.length})
-        </div>
-        <div className="grid grid-cols-3 gap-3">
-          {BADGES.map((b) => {
-            const IconComp = BADGE_ICON_MAP[b.icon] ?? Compass;
-            return (
-              <div key={b.name}
-                className="p-3 text-center"
-                style={{
-                  background: b.earned ? 'var(--accent-100)' : 'var(--bg-surface)',
-                  border: `1px solid ${b.earned ? 'var(--accent-300)' : 'var(--border-subtle)'}`,
-                  borderRadius: 'var(--radius-lg)',
-                  opacity: b.earned ? 1 : 0.55,
-                  filter: b.earned ? 'none' : 'grayscale(1)',
-                }}>
-                <div className="flex justify-center mb-1"
-                  style={{ color: b.earned ? 'var(--accent-500)' : 'var(--text-tertiary)' }}>
-                  <IconComp size={24} strokeWidth={1.8} />
-                </div>
-                <div className="font-ui mt-1" style={{ fontSize: 11, fontWeight: 700, color: 'var(--text-primary)' }}>
-                  {b.name}
-                </div>
-                <div className="font-ui mt-0.5" style={{ fontSize: 10, color: 'var(--text-tertiary)', lineHeight: 1.3 }}>
-                  {b.desc}
-                </div>
-              </div>
-            );
-          })}
-        </div>
-      </section>
+      {/* Badge Collection — ẩn tạm */}
     </div>
   );
 }

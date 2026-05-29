@@ -26,12 +26,16 @@ export function DiscoverTab({
 }) {
   const settings = useSettings();
 
-  // Build ordered stack from store — sort by journey km
-  const allSubs = useMemo(
-    () => [...settings.subLocations].sort((a, b) => a.km - b.km),
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-    [settings.subLocations.length],
-  );
+  // Shuffle once on mount — Fisher-Yates
+  const allSubs = useMemo(() => {
+    const arr = [...settings.subLocations];
+    for (let i = arr.length - 1; i > 0; i--) {
+      const j = Math.floor(Math.random() * (i + 1));
+      [arr[i], arr[j]] = [arr[j], arr[i]];
+    }
+    return arr;
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const [stack, setStack] = useState<SubLocation[]>(allSubs);
   const [reviewing, setReviewing] = useState<SubLocation | null>(null);
@@ -115,7 +119,20 @@ export function DiscoverTab({
             icon: <Share2 size={22} strokeWidth={2} />,
             label: 'Share',
             count: null as string | null,
-            onClick: () => handleDone('wishlist'),
+            onClick: async () => {
+              if (!top) return;
+              const img = (top.images?.[0] || top.image) ?? '';
+              const text = `${top.name} — ${top.province}\n${top.quote ? top.quote.replace(/"/g, '') : ''}`;
+              const url = window.location.origin;
+              if (navigator.share) {
+                try {
+                  await navigator.share({ title: top.name, text, url });
+                } catch {}
+              } else {
+                await navigator.clipboard.writeText(`${top.name}\n${text}\n${url}`).catch(() => {});
+                alert('Đã copy vào clipboard!');
+              }
+            },
             btnStyle: { border: '2px solid var(--border-default)', background: 'var(--bg-base)', color: 'var(--text-secondary)' },
           },
           {

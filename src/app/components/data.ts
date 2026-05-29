@@ -9,6 +9,7 @@ export type Province = {
   episode: number; // primary episode
   image: string;
   status: 'flagged' | 'visited' | 'locked';
+  protected?: boolean; // không thể xoá
 };
 
 export type SubLocation = {
@@ -29,6 +30,9 @@ export type SubLocation = {
   rating?: number;
   reviews?: number;
   images?: string[];
+  showQuiz?: boolean;
+  videoUrl?: string;
+  videoTitle?: string;
 };
 
 // Backward compat alias used by App.tsx and FlexBookTab.tsx
@@ -79,6 +83,8 @@ export const PROVINCES: Province[] = [
   { id: 32, name: 'Cà Mau',               lat:  9.18, lng: 105.15, region: 'south',   episode: 7, image: I.hg, status: 'locked'  },
   { id: 33, name: 'Bình Dương',           lat: 11.33, lng: 106.48, region: 'south',   episode: 7, image: I.nb, status: 'locked'  },
   { id: 34, name: 'Long An',              lat: 10.54, lng: 106.41, region: 'south',   episode: 7, image: I.mc, status: 'locked'  },
+  { id: 35, name: 'Hoàng Sa',             lat: 16.50, lng: 112.00, region: 'central', episode: 1, image: 'https://images.unsplash.com/photo-1559827260-dc66d52bef19?w=400', status: 'locked', protected: true },
+  { id: 36, name: 'Trường Sa',            lat:  8.65, lng: 113.65, region: 'south',   episode: 1, image: 'https://images.unsplash.com/photo-1518548419970-58e3b4079ab2?w=400', status: 'locked', protected: true },
 ];
 
 // ── Sub-locations (2-3 per province) ──────────────────────────────────────

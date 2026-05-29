@@ -1,7 +1,7 @@
 import { useState, useCallback, useRef, useEffect, useMemo } from 'react';
 import Map, { Marker, NavigationControl } from 'react-map-gl/maplibre';
 import { motion, AnimatePresence } from 'motion/react';
-import { Flag, HelpCircle, Play, X, Lock, MousePointer2, Bike, ChevronLeft, MapPin, Locate } from 'lucide-react';
+import { Flag, HelpCircle, Play, X, Lock, MousePointer2, Bike, ChevronLeft, ChevronRight, MapPin, Locate } from 'lucide-react';
 import 'maplibre-gl/dist/maplibre-gl.css';
 import { type Province, type SubLocation } from './data';
 import { useSettings } from '../store';
@@ -14,7 +14,7 @@ type Props = {
 };
 
 const MAP_STYLE = 'https://tiles.openfreemap.org/styles/positron';
-const INIT_VIEW  = { longitude: 106.5, latitude: 16.5, zoom: 4.6 };
+const DEFAULT_VIEW = { longitude: 106.5, latitude: 16.5, zoom: 4.6 };
 
 // Marching-ants dash sequence
 const DASH_SEQ: number[][] = [
@@ -29,6 +29,15 @@ export function MapTab({ flagged, onFlag, onQuiz }: Props) {
   const { trip: { totalKm: TOTAL_KM, currentKm: CURRENT_KM } } = settings;
   const PROVINCES = settings.provinces;
   const SUB_LOCATIONS = settings.subLocations;
+
+  // Initial view: center on currentStop province, fallback to Vietnam center
+  const INIT_VIEW = useMemo(() => {
+    const stop = settings.header.currentStop;
+    const prov = PROVINCES.find(p => p.name === stop);
+    return prov
+      ? { longitude: prov.lng, latitude: prov.lat, zoom: 5 }
+      : DEFAULT_VIEW;
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps — intentionally fixed on mount
   const PRIMARY = '#FF631F';
   const EPISODE_COLOR_MAP = new Proxy({} as Record<number, string>, { get: () => PRIMARY });
   const provColor = (p: Province) => p.status === 'locked' ? '#C4BBAF' : PRIMARY;
@@ -150,7 +159,7 @@ export function MapTab({ flagged, onFlag, onQuiz }: Props) {
     setActiveProvince(null);
     setSelected(null);
     setFilterChip(0);
-    mapGLRef.current?.flyTo({ center: [106.5, 16.5], zoom: 4.6, duration: 700 });
+    mapGLRef.current?.flyTo({ center: [INIT_VIEW.longitude, INIT_VIEW.latitude], zoom: INIT_VIEW.zoom, duration: 700 });
   }, [clearSubLines]);
 
   // ── Chip click ───────────────────────────────────────────────────────
@@ -169,6 +178,8 @@ export function MapTab({ flagged, onFlag, onQuiz }: Props) {
   }, [level, activeProvince, provinceSubs, EPISODE_COLOR_MAP, applySubLines]);
 
   const isFlagged = (s: SubLocation) => flagged.has(s.id) || s.status === 'flagged';
+  const [imgIdx, setImgIdx] = useState(0);
+  useEffect(() => { setImgIdx(0); }, [selected?.id]);
 
   // Provinces to show as chips depend on filter
   const visibleProvinces = level === 'provinces'
@@ -290,7 +301,7 @@ export function MapTab({ flagged, onFlag, onQuiz }: Props) {
 
       {/* ── Recenter button ── */}
       <button
-        onClick={() => mapGLRef.current?.flyTo({ center: [INIT_VIEW.longitude, INIT_VIEW.latitude], zoom: INIT_VIEW.zoom, duration: 700 })}
+        onClick={() => mapGLRef.current?.flyTo({ center: [DEFAULT_VIEW.longitude, DEFAULT_VIEW.latitude], zoom: DEFAULT_VIEW.zoom, duration: 700 })}
         className="absolute grid place-items-center rounded-full"
         style={{
           right: 12, top: '50%', transform: 'translateY(-50%)',
@@ -423,75 +434,182 @@ export function MapTab({ flagged, onFlag, onQuiz }: Props) {
         </div>
       </div>
 
-      {/* ── Bottom sheet (sub-location detail) ── */}
+      {/* ── Popup card (sub-location detail) ── */}
       <AnimatePresence>
         {selected && (
-          <motion.div
-            key={selected.id}
-            initial={{ y: '100%' }} animate={{ y: 0 }} exit={{ y: '100%' }}
-            transition={{ duration: 0.28, ease: [0.32,0.72,0,1] }}
-            className="absolute left-0 right-0 bottom-0 overflow-hidden"
-            style={{ background: 'var(--bg-base)', borderRadius: '20px 20px 0 0', boxShadow: '0 -4px 32px rgba(0,0,0,0.14)', zIndex: 20, maxHeight: '72%' }}
+          <div
+            className="absolute"
+            style={{ left: 12, right: 12, bottom: 68, display: 'flex', justifyContent: 'center', zIndex: 20, pointerEvents: 'none' }}
             onClick={(e) => e.stopPropagation()}
           >
-            <div className="flex justify-center pt-3 pb-1">
-              <div style={{ width: 36, height: 4, borderRadius: 2, background: 'var(--border-default)' }} />
+          <motion.div
+            key={selected.id}
+            initial={{ opacity: 0, y: 14, scale: 0.95 }}
+            animate={{ opacity: 1, y: 0, scale: 1 }}
+            exit={{ opacity: 0, y: 10, scale: 0.95 }}
+            transition={{ duration: 0.22, ease: [0.34, 1.2, 0.64, 1] }}
+            className="overflow-hidden"
+            style={{
+              width: 320, maxWidth: '100%',
+              background: 'var(--bg-base)',
+              borderRadius: 20,
+              boxShadow: '0 8px 40px rgba(0,0,0,0.22), 0 2px 8px rgba(0,0,0,0.1)',
+              pointerEvents: 'auto',
+            }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            {/* Image */}
+            {(() => {
+              const ytId = selected.videoUrl?.match(/(?:v=|youtu\.be\/|shorts\/)([^&?/\s]+)/)?.[1];
+              const ytThumb = ytId ? `https://i.ytimg.com/vi/${ytId}/hqdefault.jpg` : null;
+              const uploadedImgs = (selected.images ?? (selected.image ? [selected.image] : [])).filter(Boolean);
+              const allImgs = [...(ytThumb ? [ytThumb] : []), ...uploadedImgs];
+              const clampedIdx = Math.min(imgIdx, Math.max(0, allImgs.length - 1));
+              const currentImg = allImgs[clampedIdx] ?? '';
+              const isVideo = clampedIdx === 0 && !!ytId;
+              const hasMultiple = allImgs.length > 1;
+              return (
+            <div className="relative overflow-hidden" style={{ aspectRatio: '2/1' }}>
+              <ImageWithFallback
+                src={currentImg}
+                alt={selected.name}
+                className="w-full h-full object-cover"
+              />
+              {isVideo && (
+                <div className="absolute inset-0 grid place-items-center" style={{ pointerEvents: 'none' }}>
+                  <div className="grid place-items-center rounded-full"
+                    style={{ width: 36, height: 36, background: 'rgba(0,0,0,0.5)', backdropFilter: 'blur(4px)' }}>
+                    <Play size={14} fill="#fff" strokeWidth={0} />
+                  </div>
+                </div>
+              )}
+              {/* Gradient overlay — pointer-events none so it doesn't block buttons */}
+              <div className="absolute inset-0" style={{ background: 'linear-gradient(to top,rgba(10,10,10,0.55) 0%,transparent 55%)', pointerEvents: 'none' }} />
+
+              {/* Prev / Next buttons — above gradient */}
+              {hasMultiple && (
+                <>
+                  <button
+                    onClick={(e) => { e.stopPropagation(); setImgIdx(i => (i - 1 + allImgs.length) % allImgs.length); }}
+                    className="absolute left-2 top-1/2 -translate-y-1/2 grid place-items-center rounded-full"
+                    style={{ width: 30, height: 30, background: 'rgba(0,0,0,0.5)', backdropFilter: 'blur(4px)', color: '#fff', zIndex: 2 }}>
+                    <ChevronLeft size={15} strokeWidth={2.5} />
+                  </button>
+                  <button
+                    onClick={(e) => { e.stopPropagation(); setImgIdx(i => (i + 1) % allImgs.length); }}
+                    className="absolute right-2 top-1/2 -translate-y-1/2 grid place-items-center rounded-full"
+                    style={{ width: 30, height: 30, background: 'rgba(0,0,0,0.5)', backdropFilter: 'blur(4px)', color: '#fff', zIndex: 2 }}>
+                    <ChevronRight size={15} strokeWidth={2.5} />
+                  </button>
+                </>
+              )}
+
+              {/* Top-left badges */}
+              <div className="absolute top-3 left-3 flex items-center gap-1.5">
+                <span className="px-2 py-0.5 rounded-full font-ui" style={{ background: PRIMARY, color: '#fff', fontSize: 10, fontWeight: 700, letterSpacing: '0.05em' }}>
+                  TẬP {String(selected.episode).padStart(2,'0')}
+                </span>
+                <span className="px-2 py-0.5 rounded-full font-ui" style={{ background: 'rgba(255,255,255,0.92)', color: 'var(--text-primary)', fontSize: 10, fontWeight: 700 }}>
+                  #{selected.locNum}
+                </span>
+              </div>
+
+              {/* Close */}
+              <button
+                onClick={() => setSelected(null)}
+                className="absolute top-3 right-3 grid place-items-center rounded-full"
+                style={{ width: 28, height: 28, background: 'rgba(0,0,0,0.38)', backdropFilter: 'blur(4px)', color: '#fff' }}
+              >
+                <X size={14} strokeWidth={2.5} />
+              </button>
+
+              {/* Dots indicator */}
+              {hasMultiple && (
+                <div className="absolute bottom-2 left-0 right-0 flex justify-center gap-1" style={{ pointerEvents: 'none' }}>
+                  {allImgs.map((_, i) => (
+                    <span key={i} style={{ width: 5, height: 5, borderRadius: '50%', background: i === clampedIdx ? '#fff' : 'rgba(255,255,255,0.4)', transition: 'background 200ms' }} />
+                  ))}
+                </div>
+              )}
+
+              {/* Date badge bottom-right */}
+              {selected.status !== 'locked' && selected.date && selected.date !== '—' && (
+                <div className="absolute bottom-2.5 right-3 font-ui" style={{ background: 'rgba(255,255,255,0.9)', borderRadius: 6, padding: '2px 8px', fontSize: 10, fontWeight: 700, color: 'var(--text-secondary)' }}>
+                  {selected.date}
+                </div>
+              )}
+
+              {/* Locked overlay */}
+              {selected.status === 'locked' && (
+                <div className="absolute inset-0 grid place-items-center" style={{ background: 'rgba(237,232,224,0.82)', backdropFilter: 'blur(6px)' }}>
+                  <div className="text-center">
+                    <Lock size={24} strokeWidth={1.5} style={{ color: 'var(--text-tertiary)', margin: '0 auto 4px' }} />
+                    <div className="font-ui" style={{ fontSize: 10, color: 'var(--text-tertiary)', letterSpacing: '0.08em' }}>VÙNG CHƯA PHÁ ĐẢO</div>
+                  </div>
+                </div>
+              )}
             </div>
-            <div className="overflow-y-auto no-scrollbar" style={{ maxHeight: 'calc(72dvh - 20px)' }}>
-              <div className="relative" style={{ height: 160 }}>
-                <ImageWithFallback src={selected.image} alt={selected.name} className="w-full h-full object-cover" />
-                <div className="absolute inset-0" style={{ background: 'linear-gradient(to top,rgba(17,17,17,0.55) 0%,transparent 60%)' }} />
-                <div className="absolute top-3 left-3 flex items-center gap-1.5">
-                  <span className="px-2 py-0.5 rounded-full font-ui" style={{ background: EPISODE_COLOR_MAP[selected.episode] ?? 'var(--accent-500)', color: '#fff', fontSize: 10, fontWeight: 700, letterSpacing: '0.06em' }}>
-                    TẬP {String(selected.episode).padStart(2,'0')}
-                  </span>
-                  <span className="px-2 py-0.5 rounded-full font-ui" style={{ background: 'rgba(255,255,255,0.88)', color: 'var(--text-primary)', fontSize: 10, fontWeight: 700 }}>
-                    Điểm {selected.locNum}
-                  </span>
-                </div>
-                {selected.status === 'locked' && (
-                  <div className="absolute inset-0 grid place-items-center" style={{ background: 'rgba(237,232,224,0.82)', backdropFilter: 'blur(6px)' }}>
-                    <div className="text-center">
-                      <Lock size={28} strokeWidth={1.5} style={{ color: 'var(--text-tertiary)', margin: '0 auto 4px' }} />
-                      <div className="font-ui" style={{ fontSize: 11, color: 'var(--text-tertiary)', letterSpacing: '0.08em' }}>VÙNG CHƯA PHÁ ĐẢO</div>
-                    </div>
-                  </div>
-                )}
-                <button onClick={() => setSelected(null)} className="absolute top-3 right-3 grid place-items-center rounded-full" style={{ width: 28, height: 28, background: 'rgba(255,255,255,0.85)', color: 'var(--text-secondary)' }}>
-                  <X size={14} strokeWidth={2.5} />
-                </button>
-                {selected.status !== 'locked' && (
-                  <div className="absolute bottom-3 right-3 font-ui" style={{ background: 'rgba(255,255,255,0.88)', borderRadius: 6, padding: '2px 8px', fontSize: 10, fontWeight: 700, color: 'var(--text-secondary)' }}>{selected.date}</div>
-                )}
+              );
+            })()}
+
+            {/* Info — layout giống FeedTab card */}
+            <div className="px-4 pt-3 pb-3">
+              {/* Province · date chip */}
+              <div className="font-ui inline-flex items-center gap-1 mb-1"
+                style={{ fontSize: 11, letterSpacing: '0.05em', color: 'var(--text-tertiary)' }}>
+                <MapPin size={10} strokeWidth={2.5} />
+                {selected.province.toUpperCase()}
+                {selected.date && selected.date !== '—' && ` · ${selected.date}`}
               </div>
-              <div className="px-5 py-4 space-y-3">
-                <div>
-                  <div className="font-ui" style={{ fontSize: 11, color: 'var(--text-tertiary)' }}>{selected.province} · {selected.km} km từ HN</div>
-                  <h2 className="font-display" style={{ fontSize: 22, lineHeight: 1.15, marginTop: 2 }}>{selected.name}</h2>
+
+              {/* Title: video title if available, else location name */}
+              <h2 className="font-display line-clamp-2" style={{ fontSize: 16, lineHeight: 1.25, fontWeight: 700, marginBottom: selected.videoUrl ? 4 : 0 }}>
+                {selected.videoTitle || selected.name}
+              </h2>
+
+              {/* Sub-info: if video, show location name below title; else show quote */}
+              {selected.videoUrl && selected.videoTitle && (
+                <div className="font-ui" style={{ fontSize: 11, color: 'var(--text-tertiary)' }}>
+                  📍 {selected.name}
                 </div>
-                <p className="font-body italic" style={{ color: 'var(--text-secondary)', fontSize: 14, lineHeight: 1.6 }}>{selected.quote}</p>
-                {selected.status !== 'locked' && (
-                  <div className="flex flex-wrap gap-2 pt-1 pb-2">
-                    {isFlagged(selected) ? (
-                      <button disabled className="px-3 h-10 rounded-[10px] font-ui inline-flex items-center gap-1.5" style={{ background: 'var(--success-bg)', border: '1px solid var(--success)', color: 'var(--success)', fontSize: 13, fontWeight: 700 }}>
-                        <Flag size={13} strokeWidth={2.5} /> Đã Cắm Cờ
-                      </button>
-                    ) : (
-                      <button onClick={() => onFlag(selected.id)} className="px-4 h-10 rounded-[10px] font-ui inline-flex items-center gap-1.5" style={{ background: 'var(--accent-500)', color: '#fff', fontSize: 13, fontWeight: 700 }}>
-                        <Flag size={13} strokeWidth={2.5} /> Cắm Cờ
-                      </button>
-                    )}
-                    <button onClick={() => onQuiz(selected)} className="px-3 h-10 rounded-[10px] font-ui inline-flex items-center gap-1.5" style={{ background: 'var(--bg-surface)', border: '1px solid var(--border-default)', color: 'var(--text-primary)', fontSize: 13, fontWeight: 600 }}>
-                      <HelpCircle size={13} strokeWidth={2} /> Hỏi Xoáy
+              )}
+              {!selected.videoUrl && selected.quote && selected.quote !== '"..."' && (
+                <p className="font-body italic mt-1 line-clamp-2" style={{ color: 'var(--text-secondary)', fontSize: 13, lineHeight: 1.5 }}>
+                  {selected.quote.replace(/"/g, '')}
+                </p>
+              )}
+
+              {selected.status !== 'locked' && (
+                <div className="flex gap-2 mt-3">
+                  {isFlagged(selected) ? (
+                    <button disabled className="h-9 px-3 rounded-xl font-ui inline-flex items-center gap-1.5 flex-1 justify-center"
+                      style={{ background: 'var(--success-bg)', border: '1px solid var(--success)', color: 'var(--success)', fontSize: 12, fontWeight: 700 }}>
+                      <Flag size={12} strokeWidth={2.5} /> Đã Cắm Cờ
                     </button>
-                    <button className="px-3 h-10 rounded-[10px] font-ui inline-flex items-center gap-1.5" style={{ background: '#FF0000', color: '#fff', fontSize: 13, fontWeight: 700 }}>
-                      <Play size={12} fill="#fff" strokeWidth={0} /> Xem
+                  ) : (
+                    <button onClick={() => onFlag(selected.id)} className="h-9 px-3 rounded-xl font-ui inline-flex items-center gap-1.5 flex-1 justify-center"
+                      style={{ background: 'var(--accent-500)', color: '#fff', fontSize: 12, fontWeight: 700 }}>
+                      <Flag size={12} strokeWidth={2.5} /> Cắm Cờ
                     </button>
-                  </div>
-                )}
-              </div>
+                  )}
+                  {selected.showQuiz !== false && (
+                    <button onClick={() => onQuiz(selected)} className="h-9 px-3 rounded-xl font-ui inline-flex items-center gap-1"
+                      style={{ background: 'var(--bg-surface)', border: '1px solid var(--border-default)', color: 'var(--text-primary)', fontSize: 12, fontWeight: 600 }}>
+                      <HelpCircle size={12} strokeWidth={2} /> Quiz
+                    </button>
+                  )}
+                  {selected.videoUrl && (
+                    <a href={selected.videoUrl} target="_blank" rel="noopener noreferrer"
+                      className="h-9 px-3 rounded-xl font-ui inline-flex items-center gap-1"
+                      style={{ background: '#FF0000', color: '#fff', fontSize: 12, fontWeight: 700, textDecoration: 'none' }}>
+                      <Play size={11} fill="#fff" strokeWidth={0} /> Xem
+                    </a>
+                  )}
+                </div>
+              )}
             </div>
           </motion.div>
+          </div>
         )}
       </AnimatePresence>
     </div>

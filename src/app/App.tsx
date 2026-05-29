@@ -11,7 +11,7 @@ import { FeedTab } from './components/FeedTab';
 import { QuizModal } from './components/QuizModal';
 import { PredictModal } from './components/PredictModal';
 import { AdminPage } from './components/AdminPage';
-import { useSettings, pullSettings } from './store';
+import { useSettings, pullSettings, earnViPoint } from './store';
 import type { Stop } from './components/data';
 
 type Toast = { id: number; label: string; points: number };
@@ -28,14 +28,12 @@ export default function App() {
 function MainApp() {
   const settings = useSettings();
   useEffect(() => {
-    try {
-      if (!localStorage.getItem('lao-tao:settings:v1')) pullSettings();
-    } catch { pullSettings(); }
+    pullSettings();
   }, []);
   const [onboarded, setOnboarded] = useState(false);
   const [name, setName] = useState('');
   const [tab, setTab] = useState<TabKey>('map');
-  const [points, setPoints] = useState(settings.initialPoints);
+  const points = settings.viPoint ?? 0;
   const [flagged, setFlagged] = useState<Set<number>>(new Set());
   const [toasts, setToasts] = useState<Toast[]>([]);
   const [quizStop, setQuizStop] = useState<Stop | null>(null);
@@ -43,7 +41,7 @@ function MainApp() {
   const [discoverOpen, setDiscoverOpen] = useState(false);
 
   const addPoints = (n: number, label: string) => {
-    setPoints((p) => p + n);
+    earnViPoint(n);
     const t: Toast = { id: Date.now() + Math.random(), label, points: n };
     setToasts((arr) => [...arr, t]);
     setTimeout(() => setToasts((arr) => arr.filter((x) => x.id !== t.id)), 1700);

@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { ArrowLeft, Save, RotateCcw, Download, Upload, Plus, Trash2, Lock, LogOut, ChevronRight, ChevronDown, CalendarDays, GripVertical, ChevronUp, X } from 'lucide-react';
+import { ArrowLeft, Save, RotateCcw, Download, Upload, Plus, Trash2, Lock, LogOut, ChevronRight, ChevronDown, CalendarDays, GripVertical, ChevronUp, X, Play, ImageIcon } from 'lucide-react';
 import {
   useSettings,
   setSettings,
@@ -20,6 +20,10 @@ import {
   createCategory,
   patchCategory,
   deleteCategory,
+  patchTrip,
+  patchHeader,
+  setViPointBalance,
+  uploadImage,
   useSyncStatus,
   type VideoCategory,
 } from '../store';
@@ -54,7 +58,7 @@ const SECTIONS: { key: Section; label: string }[] = [
   { key: 'header', label: 'Header' },
   { key: 'trip', label: 'Hành Trình' },
   { key: 'badges', label: 'Huy Hiệu' },
-  { key: 'provinces', label: 'Tỉnh' },
+  { key: 'provinces', label: 'Khu Vực' },
   { key: 'sublocations', label: 'Địa Điểm' },
   { key: 'videos', label: 'Nội Dung' },
   { key: 'categories', label: 'Danh Mục' },
@@ -307,7 +311,13 @@ type SP = { draft: AppSettings; setDraft: React.Dispatch<React.SetStateAction<Ap
 
 function HeaderSection({ draft, setDraft }: SP) {
   const h = draft.header;
-  const setH = (patch: Partial<typeof h>) => setDraft({ ...draft, header: { ...h, ...patch } });
+  const setH = (patch: Partial<typeof h>) => {
+    setDraft({ ...draft, header: { ...h, ...patch } });
+  };
+  const setHAndSave = (patch: Partial<typeof h>) => {
+    setH(patch);
+    patchHeader(patch);
+  };
   const updateName = (i: number, v: string) => {
     const next = [...h.typewriterNames];
     next[i] = v;
@@ -339,13 +349,29 @@ function HeaderSection({ draft, setDraft }: SP) {
                 const file = e.target.files?.[0];
                 if (!file) return;
                 const reader = new FileReader();
-                reader.onload = (ev) => setH({ avatarText: ev.target?.result as string });
+                reader.onload = (ev) => {
+                  // Nén ảnh xuống max 200×200, JPEG 80% để tránh quá tải storage
+                  const img = new window.Image();
+                  img.onload = () => {
+                    const MAX = 200;
+                    let w = img.width, h = img.height;
+                    if (w > h) { h = Math.round(MAX * h / w); w = MAX; }
+                    else { w = Math.round(MAX * w / h); h = MAX; }
+                    const canvas = document.createElement('canvas');
+                    canvas.width = w; canvas.height = h;
+                    canvas.getContext('2d')!.drawImage(img, 0, 0, w, h);
+                    setHAndSave({ avatarText: canvas.toDataURL('image/jpeg', 0.8) });
+                  };
+                  img.src = ev.target?.result as string;
+                };
                 reader.readAsDataURL(file);
               }} />
           </label>
         </Field>
         <Field label="Đang ở (địa điểm hiện tại)">
-          <TextInput value={h.currentStop} onChange={(e) => setH({ currentStop: e.target.value })} />
+          <TextInput value={h.currentStop}
+            onChange={(e) => setH({ currentStop: e.target.value })}
+            onBlur={(e) => patchHeader({ currentStop: e.target.value })} />
         </Field>
         <div className="font-ui mb-1" style={{ fontSize: 12, color: B.inkMuted, fontWeight: 600 }}>
           Các tên hiển thị (gõ luân phiên)
@@ -371,8 +397,20 @@ function HeaderSection({ draft, setDraft }: SP) {
         </button>
       </Card>
       <Card>
-        <Field label="Điểm khởi tạo (Flex Điểm ban đầu)">
-          <NumInput value={draft.initialPoints} onChange={(e) => setDraft({ ...draft, initialPoints: Number(e.target.value) })} />
+        <Field label="Ví Point — số dư ban đầu / hiện tại">
+          <div className="flex gap-2 items-center">
+            <NumInput
+              value={draft.viPoint ?? 0}
+              onChange={(e) => setDraft({ ...draft, viPoint: Number(e.target.value) })}
+              onBlur={(e) => setViPointBalance(Number(e.target.value))}
+            />
+            <span className="font-ui shrink-0" style={{ fontSize: 12, color: B.inkMuted }}>
+              điểm
+            </span>
+          </div>
+          <div className="mt-1 font-ui" style={{ fontSize: 11, color: B.inkSubtle }}>
+            Số điểm này tích lũy qua mini game (Quẹt Card, Quiz, Dự đoán). Thay đổi sẽ lưu ngay lên server.
+          </div>
         </Field>
       </Card>
     </>
@@ -380,18 +418,49 @@ function HeaderSection({ draft, setDraft }: SP) {
 }
 
 function TripSection({ draft, setDraft }: SP) {
+  const pct = draft.trip.totalKm > 0
+    ? Math.round((draft.trip.currentKm / draft.trip.totalKm) * 100)
+    : 0;
+
+  const setTrip = (patch: Partial<typeof draft.trip>) =>
+    setDraft({ ...draft, trip: { ...draft.trip, ...patch } });
+
+  const saveTotalKm = (v: number) => patchTrip({ totalKm: v });
+  const saveCurrentKm = (v: number) => patchTrip({ currentKm: v });
+
   return (
     <>
-      <SectionTitle hint="Tổng quãng đường và vị trí hiện tại.">Hành Trình</SectionTitle>
+      <SectionTitle hint="Tổng quãng đường và km đã đi — ảnh hưởng trực tiếp tới thanh tiến độ trên bản đồ.">
+        Hành Trình
+      </SectionTitle>
       <Card>
-        <Field label="Tổng số km (TOTAL_KM)">
-          <NumInput value={draft.trip.totalKm} onChange={(e) => setDraft({ ...draft, trip: { ...draft.trip, totalKm: Number(e.target.value) } })} />
+        <Field label="Tổng số km (điểm đích)">
+          <NumInput
+            value={draft.trip.totalKm}
+            onChange={(e) => setTrip({ totalKm: Number(e.target.value) })}
+            onBlur={(e) => saveTotalKm(Number(e.target.value))}
+          />
         </Field>
-        <Field label="Đã đi (CURRENT_KM)">
-          <NumInput value={draft.trip.currentKm} onChange={(e) => setDraft({ ...draft, trip: { ...draft.trip, currentKm: Number(e.target.value) } })} />
+        <Field label="Đã đi (km hiện tại)">
+          <NumInput
+            value={draft.trip.currentKm}
+            onChange={(e) => setTrip({ currentKm: Number(e.target.value) })}
+            onBlur={(e) => saveCurrentKm(Number(e.target.value))}
+          />
         </Field>
-        <div className="font-ui mt-2" style={{ fontSize: 12, color: B.inkMuted }}>
-          Tiến độ: {Math.round((draft.trip.currentKm / draft.trip.totalKm) * 100)}%
+
+        {/* Live progress preview */}
+        <div className="mt-3">
+          <div className="flex items-center justify-between mb-1">
+            <span className="font-ui" style={{ fontSize: 11, color: B.inkMuted }}>Tiến độ hành trình</span>
+            <span className="font-ui" style={{ fontSize: 11, fontWeight: 700, color: B.orange }}>
+              {draft.trip.currentKm.toLocaleString()} / {draft.trip.totalKm.toLocaleString()} km · {pct}%
+            </span>
+          </div>
+          <div className="h-2 rounded-full overflow-hidden" style={{ background: B.hairline }}>
+            <div className="h-full rounded-full transition-all duration-500"
+              style={{ width: `${Math.min(pct, 100)}%`, background: 'linear-gradient(90deg,#FFBA80,#FF631F)' }} />
+          </div>
         </div>
       </Card>
     </>
@@ -414,10 +483,16 @@ function BadgesSection({ draft, setDraft }: SP) {
             <Field label="Icon (lucide)"><TextInput value={b.icon} onChange={(e) => update(i, { icon: e.target.value })} /></Field>
             <Field label="Tên"><TextInput value={b.name} onChange={(e) => update(i, { name: e.target.value })} /></Field>
             <Field label="Mô tả"><TextInput value={b.desc} onChange={(e) => update(i, { desc: e.target.value })} /></Field>
-            <label className="inline-flex items-center gap-2 mb-3">
-              <input type="checkbox" checked={b.earned} onChange={(e) => update(i, { earned: e.target.checked })} />
-              <span className="font-ui" style={{ fontSize: 12 }}>Đã đạt</span>
-            </label>
+            <div className="inline-flex flex-col items-center gap-1 mb-3">
+              <div
+                onClick={() => update(i, { earned: !b.earned })}
+                className="relative cursor-pointer shrink-0"
+                style={{ width: 44, height: 24, borderRadius: 12, background: b.earned ? B.ink : B.hairline, transition: 'background 200ms' }}
+              >
+                <div style={{ position: 'absolute', top: 2, borderRadius: '50%', width: 20, height: 20, background: '#fff', boxShadow: '0 1px 4px rgba(0,0,0,0.2)', left: b.earned ? 22 : 2, transition: 'left 200ms' }} />
+              </div>
+              <span className="font-ui" style={{ fontSize: 11, color: B.inkMuted }}>Đã đạt</span>
+            </div>
             <button onClick={() => remove(i)} className="h-9 w-9 rounded grid place-items-center mb-3" style={{ background: B.canvas, border: `1px solid ${B.hairline}` }}>
               <Trash2 size={14} />
             </button>
@@ -431,11 +506,44 @@ function BadgesSection({ draft, setDraft }: SP) {
   );
 }
 
+function parseLocationLines(text: string): Array<{ name: string; lat: number; lng: number }> {
+  return text.split('\n').flatMap(line => {
+    const t = line.trim();
+    if (!t) return [];
+    // Google Maps URL — extract @lat,lng or q=lat,lng or ll=lat,lng
+    const urlCoord = t.match(/@(-?\d+\.?\d+),(-?\d+\.?\d+)/) ||
+                     t.match(/[?&]q=(-?\d+\.?\d+),(-?\d+\.?\d+)/) ||
+                     t.match(/ll=(-?\d+\.?\d+),(-?\d+\.?\d+)/);
+    if (urlCoord) {
+      // Try to extract place name from URL path
+      const nm = t.match(/maps\/place\/([^/@]+)/);
+      const name = nm ? decodeURIComponent(nm[1].replace(/\+/g, ' ')).split(',')[0].trim() : '';
+      return [{ name, lat: parseFloat(urlCoord[1]), lng: parseFloat(urlCoord[2]) }];
+    }
+    // "Tên | lat, lng" or "Tên, lat, lng" (3+ comma-parts)
+    const pipe = t.split('|').map(s => s.trim());
+    if (pipe.length === 2) {
+      const coords = pipe[1].split(',').map(s => parseFloat(s.trim()));
+      if (coords.length >= 2 && !isNaN(coords[0]) && !isNaN(coords[1]))
+        return [{ name: pipe[0], lat: coords[0], lng: coords[1] }];
+    }
+    // Plain "lat, lng"
+    const plain = t.split(',').map(s => parseFloat(s.trim()));
+    if (plain.length >= 2 && !isNaN(plain[0]) && !isNaN(plain[1]) && Math.abs(plain[0]) <= 90)
+      return [{ name: '', lat: plain[0], lng: plain[1] }];
+    return [];
+  });
+}
+
 function ProvincesSection({ draft, setDraft }: SP) {
   const [q, setQ] = useState('');
   const [expanded, setExpanded] = useState<Set<number>>(new Set());
   const [confirmed, setConfirmed] = useState<Set<number>>(new Set());
   const [hoveredId, setHoveredId] = useState<number | null>(null);
+  const [expandedLatLng, setExpandedLatLng] = useState<Set<number>>(new Set());
+  const toggleLatLng = (id: number) => setExpandedLatLng(prev => { const s = new Set(prev); s.has(id) ? s.delete(id) : s.add(id); return s; });
+  const [bulkPid, setBulkPid] = useState<number | null>(null);
+  const [bulkText, setBulkText] = useState('');
   const dragItemRef = useRef<number | null>(null);
   const toggleExpanded = (id: number) => setExpanded(prev => { const s = new Set(prev); s.has(id) ? s.delete(id) : s.add(id); return s; });
   const confirm_ = (id: number) => setConfirmed(prev => { const s = new Set(prev); s.add(id); return s; });
@@ -448,7 +556,9 @@ function ProvincesSection({ draft, setDraft }: SP) {
     patchProvince(id, patch);
   };
   const remove = (id: number) => {
-    if (!confirm('Xoá tỉnh này? Các địa điểm thuộc tỉnh cũng sẽ bị xoá.')) return;
+    const prov = draft.provinces.find(p => p.id === id);
+    if (prov?.protected) { alert('Khu vực này được bảo vệ và không thể xoá.'); return; }
+    if (!confirm('Xoá khu vực này? Các địa điểm thuộc khu vực cũng sẽ bị xoá.')) return;
     setDraft({
       ...draft,
       provinces: draft.provinces.filter((p) => p.id !== id),
@@ -466,7 +576,7 @@ function ProvincesSection({ draft, setDraft }: SP) {
   const filtered = draft.provinces.filter((p) => p.name.toLowerCase().includes(q.toLowerCase()));
   return (
     <>
-      <SectionTitle hint="Bấm trạng thái để xoay vòng locked → flagged → visited.">Tỉnh</SectionTitle>
+      <SectionTitle hint="Bấm trạng thái để xoay vòng: Chưa đến → Đã ghé → Hoàn thành. Khu vực có 🔒 không thể xoá.">Khu Vực</SectionTitle>
       <div className="mb-3 flex gap-2">
         <TextInput placeholder="Tìm tỉnh..." value={q} onChange={(e) => setQ(e.target.value)} />
         <button onClick={add} className="h-9 px-3 rounded font-ui inline-flex items-center gap-1 shrink-0"
@@ -486,7 +596,7 @@ function ProvincesSection({ draft, setDraft }: SP) {
             <div key={p.id} style={{ borderTop: `1px solid ${B.hairline}` }}
               onMouseEnter={() => setHoveredId(p.id)} onMouseLeave={() => setHoveredId(null)}>
               {(() => {
-                const isNew = p.id > 34;
+                const isNew = p.id > 36;
                 const isConfirmed = confirmed.has(p.id);
                 const isEditing = isNew && !isConfirmed;
                 const showHoverActions = isNew && isConfirmed && hoveredId === p.id;
@@ -516,14 +626,30 @@ function ProvincesSection({ draft, setDraft }: SP) {
                           const file = e.target.files?.[0];
                           if (!file) return;
                           const reader = new FileReader();
-                          reader.onload = (ev) => updateAndSave(p.id, { image: ev.target?.result as string });
+                          reader.onload = (ev) => {
+                            const img = new window.Image();
+                            img.onload = () => {
+                              const MAX = 400;
+                              let w = img.width, h = img.height;
+                              if (w > h) { h = Math.round(MAX * h / w); w = MAX; }
+                              else { w = Math.round(MAX * w / h); h = MAX; }
+                              const cv = document.createElement('canvas');
+                              cv.width = w; cv.height = h;
+                              cv.getContext('2d')!.drawImage(img, 0, 0, w, h);
+                              updateAndSave(p.id, { image: cv.toDataURL('image/jpeg', 0.85) });
+                            };
+                            img.src = ev.target?.result as string;
+                          };
                           reader.readAsDataURL(file);
                         }} />
                     </label>
 
                     {isEditing
                       ? <TextInput value={p.name} onChange={(e) => update(p.id, { name: e.target.value })} />
-                      : <div className="font-ui truncate" style={{ fontSize: 13, fontWeight: 700, color: B.ink }}>{p.name}</div>
+                      : <div className="flex items-center gap-1.5 min-w-0">
+                          <span className="font-ui truncate" style={{ fontSize: 13, fontWeight: 700, color: B.ink }}>{p.name}</span>
+                          {p.protected && <span title="Khu vực được bảo vệ" style={{ fontSize: 11 }}>🔒</span>}
+                        </div>
                     }
                     <StatusButton status={p.status} onChange={(s) => updateAndSave(p.id, { status: s })} />
                     <button
@@ -622,53 +748,126 @@ function ProvincesSection({ draft, setDraft }: SP) {
                   <div className="pb-2 px-3" style={{ background: `rgba(35,37,41,0.02)` }}>
                     <div className="rounded overflow-hidden mb-2" style={{ border: `1px solid ${B.hairline}` }}>
                       <div className="grid px-3 py-1.5 font-ui"
-                        style={{ gridTemplateColumns: '16px 20px 1fr 120px 110px 52px 30px', background: B.canvas, fontSize: 10, fontWeight: 700, color: B.inkMuted }}>
-                        <div></div><div>#</div><div>Tên địa điểm</div><div>Check-in</div><div>Trạng thái</div><div></div><div></div>
+                        style={{ gridTemplateColumns: '16px 20px 1fr 120px 110px 52px 30px 28px', background: B.canvas, fontSize: 10, fontWeight: 700, color: B.inkMuted }}>
+                        <div></div><div>#</div><div>Tên địa điểm</div><div>Check-in</div><div>Trạng thái</div><div></div><div></div><div title="Toạ độ">📍</div>
                       </div>
                       {provSubs.length === 0 && (
                         <div className="px-3 py-2 font-ui" style={{ fontSize: 11, color: B.inkSubtle }}>Chưa có địa điểm</div>
                       )}
                       {provSubs.map((s, idx) => (
-                        <div key={s.id} className="grid px-3 py-1.5 items-center gap-1"
-                          draggable
-                          onDragStart={() => { dragItemRef.current = s.id; }}
-                          onDragOver={onDragOver}
-                          onDrop={(e) => onDrop(e, s.id)}
-                          style={{ gridTemplateColumns: '16px 20px 1fr 120px 110px 52px 30px', borderTop: `1px solid ${B.hairline}`, cursor: 'grab' }}>
-                          <GripVertical size={12} style={{ color: B.inkSubtle }} />
-                          <span className="font-ui" style={{ fontSize: 11, color: B.inkSubtle }}>{idx + 1}</span>
-                          <TextInput value={s.name} onChange={(e) => updateSub(s.id, { name: e.target.value })} style={{ height: 30, fontSize: 11, padding: '0 8px' }} />
-                          <div className="relative">
-                            <input type="date" value={s.date === '—' ? '' : s.date}
-                              onChange={(e) => updateSub(s.id, { date: e.target.value || '—' })}
-                              className="h-[30px] w-full pl-2 pr-7 font-ui outline-none rounded"
-                              style={{ ...inputStyle, fontSize: 11 }} />
-                            <CalendarDays size={12} className="absolute right-2 top-1/2 -translate-y-1/2 pointer-events-none" style={{ color: B.inkMuted }} />
-                          </div>
-                          <StatusButton status={s.status} onChange={(st) => updateSubStatus(s.id, st)} />
-                          <div className="flex flex-col gap-0.5">
-                            <button onClick={() => moveSubUp(s.id)} disabled={idx === 0}
-                              className="h-[22px] w-full rounded grid place-items-center"
-                              style={{ background: B.canvas, border: `1px solid ${B.hairline}`, opacity: idx === 0 ? 0.3 : 1 }}>
-                              <ChevronUp size={10} />
+                        <div key={s.id} style={{ borderTop: `1px solid ${B.hairline}` }}>
+                          {/* Main row */}
+                          <div className="grid px-3 py-1.5 items-center gap-1"
+                            draggable
+                            onDragStart={() => { dragItemRef.current = s.id; }}
+                            onDragOver={onDragOver}
+                            onDrop={(e) => onDrop(e, s.id)}
+                            style={{ gridTemplateColumns: '16px 20px 1fr 120px 110px 52px 30px 28px', cursor: 'grab' }}>
+                            <GripVertical size={12} style={{ color: B.inkSubtle }} />
+                            <span className="font-ui" style={{ fontSize: 11, color: B.inkSubtle }}>{idx + 1}</span>
+                            <TextInput value={s.name} onChange={(e) => updateSub(s.id, { name: e.target.value })} style={{ height: 30, fontSize: 11, padding: '0 8px' }} />
+                            <div className="relative">
+                              <input type="date" value={s.date === '—' ? '' : s.date}
+                                onChange={(e) => updateSub(s.id, { date: e.target.value || '—' })}
+                                className="h-[30px] w-full pl-2 pr-7 font-ui outline-none rounded"
+                                style={{ ...inputStyle, fontSize: 11 }} />
+                              <CalendarDays size={12} className="absolute right-2 top-1/2 -translate-y-1/2 pointer-events-none" style={{ color: B.inkMuted }} />
+                            </div>
+                            <StatusButton status={s.status} onChange={(st) => updateSubStatus(s.id, st)} />
+                            <div className="flex flex-col gap-0.5">
+                              <button onClick={() => moveSubUp(s.id)} disabled={idx === 0}
+                                className="h-[22px] w-full rounded grid place-items-center"
+                                style={{ background: B.canvas, border: `1px solid ${B.hairline}`, opacity: idx === 0 ? 0.3 : 1 }}>
+                                <ChevronUp size={10} />
+                              </button>
+                              <button onClick={() => moveSubDown(s.id)} disabled={idx === provSubs.length - 1}
+                                className="h-[22px] w-full rounded grid place-items-center"
+                                style={{ background: B.canvas, border: `1px solid ${B.hairline}`, opacity: idx === provSubs.length - 1 ? 0.3 : 1 }}>
+                                <ChevronDown size={10} />
+                              </button>
+                            </div>
+                            <button onClick={() => removeSub(s.id)} className="h-7 w-7 rounded grid place-items-center"
+                              style={{ background: B.canvas, border: `1px solid ${B.hairline}` }}>
+                              <Trash2 size={11} />
                             </button>
-                            <button onClick={() => moveSubDown(s.id)} disabled={idx === provSubs.length - 1}
-                              className="h-[22px] w-full rounded grid place-items-center"
-                              style={{ background: B.canvas, border: `1px solid ${B.hairline}`, opacity: idx === provSubs.length - 1 ? 0.3 : 1 }}>
-                              <ChevronDown size={10} />
+                            {/* Toggle lat/lng */}
+                            <button
+                              onClick={(e) => { e.stopPropagation(); toggleLatLng(s.id); }}
+                              title="Nhập kinh độ / vĩ độ"
+                              className="h-7 w-7 rounded grid place-items-center text-base"
+                              style={{ background: expandedLatLng.has(s.id) ? B.ink : B.canvas, border: `1px solid ${B.hairline}`, fontSize: 13 }}>
+                              <span style={{ filter: expandedLatLng.has(s.id) ? 'brightness(10)' : 'none' }}>📍</span>
                             </button>
                           </div>
-                          <button onClick={() => removeSub(s.id)} className="h-7 w-7 rounded grid place-items-center"
-                            style={{ background: B.canvas, border: `1px solid ${B.hairline}` }}>
-                            <Trash2 size={11} />
-                          </button>
+
+                          {/* Lat/Lng expandable row */}
+                          {expandedLatLng.has(s.id) && (
+                            <div className="px-4 pb-2.5 pt-2" style={{ background: `${B.ink}06` }}>
+                              {/* Quick paste */}
+                              <div className="mb-2">
+                                <div className="font-ui mb-1" style={{ fontSize: 10, color: B.inkMuted, fontWeight: 700, letterSpacing: '0.04em' }}>
+                                  PASTE NHANH — link Google Maps hoặc "lat, lng"
+                                </div>
+                                <input
+                                  type="text"
+                                  placeholder='VD: 22.8026, 104.9784  hoặc link maps.google.com/...'
+                                  className="w-full font-ui outline-none rounded"
+                                  style={{ ...inputStyle, height: 30, fontSize: 11, padding: '0 10px' }}
+                                  onPaste={(e) => {
+                                    const text = e.clipboardData.getData('text');
+                                    // Parse Google Maps URL: @lat,lng or q=lat,lng
+                                    const urlMatch = text.match(/@(-?\d+\.?\d*),(-?\d+\.?\d*)/) ||
+                                                     text.match(/[?&]q=(-?\d+\.?\d*),(-?\d+\.?\d*)/) ||
+                                                     text.match(/ll=(-?\d+\.?\d*),(-?\d+\.?\d*)/);
+                                    // Parse plain "lat, lng"
+                                    const plainMatch = !urlMatch && text.match(/^(-?\d+\.?\d*)\s*,\s*(-?\d+\.?\d*)$/);
+                                    const m = urlMatch || plainMatch;
+                                    if (m) {
+                                      e.preventDefault();
+                                      const lat = parseFloat(m[1]), lng = parseFloat(m[2]);
+                                      updateSub(s.id, { lat, lng });
+                                      patchSubLocation(s.id, { lat, lng });
+                                      (e.target as HTMLInputElement).value = `${lat}, ${lng}`;
+                                    }
+                                  }}
+                                />
+                              </div>
+                              {/* Manual inputs */}
+                              <div className="flex items-center gap-3">
+                                <div className="flex items-center gap-1.5">
+                                  <span className="font-ui" style={{ fontSize: 10, color: B.inkMuted }}>Vĩ độ</span>
+                                  <input type="number" step="0.0001" value={s.lat}
+                                    onChange={(e) => updateSub(s.id, { lat: Number(e.target.value) })}
+                                    onBlur={(e) => patchSubLocation(s.id, { lat: Number(e.target.value) })}
+                                    className="font-ui outline-none rounded"
+                                    style={{ ...inputStyle, height: 28, width: 105, fontSize: 11, padding: '0 8px' }} />
+                                </div>
+                                <div className="flex items-center gap-1.5">
+                                  <span className="font-ui" style={{ fontSize: 10, color: B.inkMuted }}>Kinh độ</span>
+                                  <input type="number" step="0.0001" value={s.lng}
+                                    onChange={(e) => updateSub(s.id, { lng: Number(e.target.value) })}
+                                    onBlur={(e) => patchSubLocation(s.id, { lng: Number(e.target.value) })}
+                                    className="font-ui outline-none rounded"
+                                    style={{ ...inputStyle, height: 28, width: 105, fontSize: 11, padding: '0 8px' }} />
+                                </div>
+                                <span className="font-ui" style={{ fontSize: 10, color: B.inkSubtle }}>Blur để lưu</span>
+                              </div>
+                            </div>
+                          )}
                         </div>
                       ))}
                     </div>
-                    <button onClick={addSub} className="h-7 px-3 rounded font-ui inline-flex items-center gap-1"
-                      style={{ background: B.ink, color: B.canvasPure, fontSize: 11, fontWeight: 700 }}>
-                      <Plus size={11} /> Thêm địa điểm
-                    </button>
+                    <div className="flex gap-2">
+                      <button onClick={addSub} className="h-7 px-3 rounded font-ui inline-flex items-center gap-1"
+                        style={{ background: B.ink, color: B.canvasPure, fontSize: 11, fontWeight: 700 }}>
+                        <Plus size={11} /> Thêm địa điểm
+                      </button>
+                      <button onClick={() => { setBulkPid(p.id); setBulkText(''); }}
+                        className="h-7 px-3 rounded font-ui inline-flex items-center gap-1"
+                        style={{ background: B.canvas, border: `1px solid ${B.hairline}`, fontSize: 11, fontWeight: 700, color: B.ink }}>
+                        ⚡ Thêm nhanh
+                      </button>
+                    </div>
                   </div>
                 );
               })()}
@@ -676,6 +875,94 @@ function ProvincesSection({ draft, setDraft }: SP) {
           );
         })}
       </div>
+
+      {/* ── Bulk add modal ── */}
+      {bulkPid !== null && (() => {
+        const prov = draft.provinces.find(p => p.id === bulkPid)!;
+        const parsed = parseLocationLines(bulkText);
+        const addBulk = () => {
+          if (!prov || parsed.length === 0) return;
+          const inProv = draft.subLocations.filter(s => s.provinceId === prov.id);
+          let nextId = draft.subLocations.reduce((m, s) => Math.max(m, s.id), 0) + 1;
+          let nextLoc = inProv.reduce((m, s) => Math.max(m, s.locNum), 0) + 1;
+          const newSubs = parsed.map(({ name, lat, lng }) => ({
+            id: nextId++, provinceId: prov.id, episode: prov.episode, locNum: nextLoc++,
+            name: name || `Địa điểm ${nextLoc - 1}`,
+            province: prov.name, region: prov.region,
+            km: 0, date: '—', quote: '"..."',
+            image: prov.image, status: 'locked' as const, lat, lng,
+          }));
+          setDraft({ ...draft, subLocations: [...draft.subLocations, ...newSubs] });
+          setExpanded(prev => new Set(prev).add(prov.id));
+          setBulkPid(null); setBulkText('');
+        };
+        return (
+          <div className="fixed inset-0 z-50 grid place-items-center px-4"
+            style={{ background: 'rgba(0,0,0,0.45)', backdropFilter: 'blur(6px)' }}
+            onClick={() => { setBulkPid(null); setBulkText(''); }}>
+            <div className="w-full max-w-lg rounded-2xl overflow-hidden"
+              style={{ background: B.canvasPure, boxShadow: '0 24px 64px rgba(0,0,0,0.22)', maxHeight: '90dvh', overflowY: 'auto' }}
+              onClick={e => e.stopPropagation()}>
+              <div className="flex items-center justify-between px-5 py-4" style={{ borderBottom: `1px solid ${B.hairline}` }}>
+                <div>
+                  <div className="font-ui" style={{ fontSize: 15, fontWeight: 700, color: B.ink }}>⚡ Thêm nhanh nhiều địa điểm</div>
+                  <div className="font-ui mt-0.5" style={{ fontSize: 12, color: B.inkMuted }}>Tỉnh: {prov?.name}</div>
+                </div>
+                <button onClick={() => { setBulkPid(null); setBulkText(''); }}
+                  className="h-8 w-8 rounded grid place-items-center"
+                  style={{ background: B.canvas, border: `1px solid ${B.hairline}` }}>
+                  <X size={15} />
+                </button>
+              </div>
+              <div className="p-5 flex flex-col gap-4">
+                <div className="rounded-lg p-3 font-ui" style={{ background: B.canvas, fontSize: 11, color: B.inkMuted, lineHeight: 1.7 }}>
+                  Mỗi dòng 1 địa điểm — hỗ trợ:<br/>
+                  • <strong>Link Google Maps</strong> — tự lấy tên + tọa độ<br/>
+                  • <code style={{ background: B.hairline, padding: '1px 4px', borderRadius: 3 }}>Tên | lat, lng</code> — VD: <code style={{ background: B.hairline, padding: '1px 4px', borderRadius: 3 }}>Chợ Đêm | 22.82, 104.97</code><br/>
+                  • <code style={{ background: B.hairline, padding: '1px 4px', borderRadius: 3 }}>lat, lng</code> — VD: <code style={{ background: B.hairline, padding: '1px 4px', borderRadius: 3 }}>22.8226, 104.9784</code>
+                </div>
+                <textarea autoFocus rows={6}
+                  placeholder={"https://maps.google.com/maps/place/...\nTên địa điểm | 22.82, 104.97\n22.8226, 104.9784"}
+                  value={bulkText} onChange={e => setBulkText(e.target.value)}
+                  className="w-full font-ui outline-none rounded resize-none"
+                  style={{ ...inputStyle, fontSize: 12, padding: '10px 12px', lineHeight: 1.7 }}
+                />
+                {parsed.length > 0 && (
+                  <div className="rounded-lg overflow-hidden" style={{ border: `1px solid ${B.hairline}` }}>
+                    <div className="px-4 py-2 font-ui" style={{ background: B.canvas, fontSize: 11, fontWeight: 700, color: B.inkMuted }}>
+                      XEM TRƯỚC — {parsed.length} địa điểm
+                    </div>
+                    {parsed.map((loc, i) => (
+                      <div key={i} className="flex items-center gap-3 px-4 py-2 font-ui" style={{ borderTop: `1px solid ${B.hairline}`, fontSize: 12 }}>
+                        <span style={{ color: B.inkSubtle, minWidth: 20 }}>{i + 1}.</span>
+                        <span style={{ flex: 1, color: B.ink, fontWeight: 600 }}>{loc.name || <span style={{ color: B.inkSubtle, fontStyle: 'italic' }}>Chưa có tên</span>}</span>
+                        <span style={{ fontSize: 10, color: B.inkMuted }}>{loc.lat.toFixed(4)}, {loc.lng.toFixed(4)}</span>
+                      </div>
+                    ))}
+                  </div>
+                )}
+                {bulkText.trim() && parsed.length === 0 && (
+                  <div className="font-ui px-3 py-2 rounded-lg" style={{ fontSize: 12, color: '#92400E', background: '#FEF3C7' }}>
+                    ⚠ Không nhận ra định dạng. Thử paste link Google Maps hoặc "lat, lng".
+                  </div>
+                )}
+                <div className="flex gap-2 pt-1" style={{ borderTop: `1px solid ${B.hairline}` }}>
+                  <button onClick={addBulk} disabled={parsed.length === 0}
+                    className="h-10 px-5 rounded-full font-ui inline-flex items-center gap-1.5 flex-1 justify-center"
+                    style={{ background: parsed.length > 0 ? B.ink : B.canvas, color: parsed.length > 0 ? B.canvasPure : B.inkSubtle, fontSize: 13, fontWeight: 700, cursor: parsed.length > 0 ? 'pointer' : 'not-allowed' }}>
+                    <Plus size={14} /> Thêm {parsed.length > 0 ? `${parsed.length} địa điểm` : '...'}
+                  </button>
+                  <button onClick={() => { setBulkPid(null); setBulkText(''); }}
+                    className="h-10 px-4 rounded-full font-ui"
+                    style={{ background: B.canvas, border: `1px solid ${B.hairline}`, fontSize: 13, color: B.inkMuted }}>
+                    Huỷ
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+        );
+      })()}
     </>
   );
 }
@@ -769,12 +1056,6 @@ function SubLocationsSection({ draft, setDraft }: SP) {
                   {isOpen ? <ChevronDown size={14} color={B.inkMuted} /> : <ChevronRight size={14} color={B.inkMuted} />}
                   <span className="font-ui" style={{ fontSize: 14, fontWeight: 700, color: B.ink }}>{prov.name}</span>
                   <span className="font-ui px-2 py-0.5 rounded-full" style={{ fontSize: 11, background: B.hairline, color: B.inkMuted }}>
-                    Ep {prov.episode}
-                  </span>
-                  <span className="font-ui px-2 py-0.5 rounded-full" style={{ fontSize: 11, background: B.hairline, color: B.inkMuted }}>
-                    {prov.region}
-                  </span>
-                  <span className="font-ui px-2 py-0.5 rounded-full" style={{ fontSize: 11, background: B.hairline, color: B.inkMuted }}>
                     {subs.length} địa điểm
                   </span>
                 </div>
@@ -821,6 +1102,26 @@ function SubLocationsSection({ draft, setDraft }: SP) {
   );
 }
 
+function compressForUpload(file: File, maxPx = 1200, quality = 0.88): Promise<string> {
+  return new Promise((resolve) => {
+    const reader = new FileReader();
+    reader.onload = (e) => {
+      const img = new window.Image();
+      img.onload = () => {
+        let w = img.width, h = img.height;
+        if (w > h) { h = Math.round(maxPx * h / w); w = maxPx; }
+        else { w = Math.round(maxPx * w / h); h = maxPx; }
+        const cv = document.createElement('canvas');
+        cv.width = w; cv.height = h;
+        cv.getContext('2d')!.drawImage(img, 0, 0, w, h);
+        resolve(cv.toDataURL('image/jpeg', quality));
+      };
+      img.src = e.target?.result as string;
+    };
+    reader.readAsDataURL(file);
+  });
+}
+
 function SubLocationCard({
   s, provImg, onUpdate, onRemove,
 }: {
@@ -830,8 +1131,12 @@ function SubLocationCard({
   onRemove: () => void;
 }) {
   const [open, setOpen] = useState(false);
+  const [uploadingIdx, setUploadingIdx] = useState<Set<number>>(new Set());
   const imgs = s.images ?? (s.image ? [s.image] : []);
-  const displayImg = imgs[0] || provImg;
+  // If videoUrl set and no images, show YT thumbnail as default
+  const ytId = s.videoUrl?.match(/(?:v=|youtu\.be\/|shorts\/)([^&?/\s]+)/)?.[1];
+  const ytThumb = ytId ? `https://i.ytimg.com/vi/${ytId}/hqdefault.jpg` : null;
+  const displayImg = imgs[0] || ytThumb || provImg;
 
   const statusColors = {
     locked:  { bg: '#E5E7EB', fg: '#6B7280', dot: '#9CA3AF' },
@@ -871,7 +1176,7 @@ function SubLocationCard({
           <span className="inline-block rounded-full" style={{ width: 8, height: 8, background: statusColors.dot }} />
           <span className="font-ui px-2 py-0.5 rounded-full"
             style={{ fontSize: 10, background: statusColors.bg, color: statusColors.fg, fontWeight: 700 }}>
-            {s.status}
+            {STATUS_LABEL[s.status]}
           </span>
         </div>
 
@@ -886,7 +1191,7 @@ function SubLocationCard({
         {/* Bottom info */}
         <div className="absolute inset-x-0 bottom-0 px-3 pb-3">
           <div className="font-ui mb-0.5" style={{ fontSize: 10, color: 'rgba(255,255,255,0.65)' }}>
-            #{s.locNum} · {s.date !== '—' ? s.date : 'Chưa có ngày'} · km {s.km}
+            #{s.locNum} · {s.date !== '—' ? s.date : 'Chưa có ngày'}
           </div>
           <div className="font-display" style={{ fontSize: 15, color: '#fff', lineHeight: 1.2, fontWeight: 700 }}>
             {s.name}
@@ -926,12 +1231,9 @@ function SubLocationCard({
 
             <div className="p-5 flex flex-col gap-3">
               {/* Row 1 */}
-              <div className="grid grid-cols-[1fr_88px_110px_100px] gap-2">
+              <div className="grid grid-cols-[1fr_110px_100px] gap-2">
                 <Field label="Tên địa điểm">
                   <TextInput value={s.name} onChange={(e) => onUpdate({ name: e.target.value })} />
-                </Field>
-                <Field label="Km">
-                  <NumInput value={s.km} onChange={(e) => onUpdate({ km: Number(e.target.value) })} />
                 </Field>
                 <Field label="Ngày">
                   <div className="relative">
@@ -947,53 +1249,169 @@ function SubLocationCard({
                 </Field>
               </div>
 
+              {/* Quiz toggle */}
+              <div className="flex items-center justify-between py-1 px-1">
+                <div>
+                  <div className="font-ui" style={{ fontSize: 13, fontWeight: 600, color: B.ink }}>Hiện nút Quiz</div>
+                  <div className="font-ui" style={{ fontSize: 11, color: B.inkMuted }}>Hiển thị nút "Quiz" trên popup bản đồ</div>
+                </div>
+                <div
+                  onClick={() => onUpdate({ showQuiz: !(s.showQuiz !== false) })}
+                  className="relative shrink-0 cursor-pointer"
+                  style={{ width: 44, height: 24, borderRadius: 12, background: s.showQuiz !== false ? B.ink : B.hairline, transition: 'background 200ms' }}
+                >
+                  <div style={{
+                    position: 'absolute', top: 2, borderRadius: '50%',
+                    width: 20, height: 20, background: '#fff',
+                    boxShadow: '0 1px 4px rgba(0,0,0,0.2)',
+                    left: s.showQuiz !== false ? 22 : 2,
+                    transition: 'left 200ms',
+                  }} />
+                </div>
+              </div>
+
+              {/* Video URL */}
+              <Field label="Link Video (YouTube)">
+                <div className="flex flex-col gap-1.5">
+                  <div className="flex gap-2 items-center">
+                    {ytId && (
+                      <div className="shrink-0 rounded overflow-hidden" style={{ width: 60, height: 34, border: `1px solid ${B.hairline}` }}>
+                        <img src={`https://i.ytimg.com/vi/${ytId}/default.jpg`} alt="" className="w-full h-full object-cover" />
+                      </div>
+                    )}
+                    <TextInput
+                      value={s.videoUrl ?? ''}
+                      placeholder="https://youtube.com/watch?v=..."
+                      onChange={async (e) => {
+                        const url = e.target.value;
+                        const id = url.match(/(?:v=|youtu\.be\/|shorts\/)([^&?/\s]+)/)?.[1];
+                        const patch: Partial<SubLocation> = { videoUrl: url };
+                        if (id && imgs.filter(Boolean).length === 0) {
+                          patch.image = `https://i.ytimg.com/vi/${id}/hqdefault.jpg`;
+                        }
+                        onUpdate(patch);
+                        // Auto-fetch title from noembed
+                        if (id) {
+                          try {
+                            const res = await fetch(`https://noembed.com/embed?url=https://www.youtube.com/watch?v=${id}`);
+                            const d = await res.json();
+                            if (d.title) onUpdate({ videoTitle: d.title });
+                          } catch {}
+                        }
+                      }}
+                    />
+                    {s.videoUrl && (
+                      <button onClick={() => onUpdate({ videoUrl: '', videoTitle: '' })}
+                        className="shrink-0 h-9 w-9 rounded grid place-items-center"
+                        style={{ background: B.canvas, border: `1px solid ${B.hairline}` }}>
+                        <X size={13} />
+                      </button>
+                    )}
+                  </div>
+                  {s.videoTitle && (
+                    <div className="font-ui px-2 py-1 rounded" style={{ fontSize: 11, color: B.inkMuted, background: B.canvas, border: `1px solid ${B.hairline}` }}>
+                      🎬 {s.videoTitle}
+                    </div>
+                  )}
+                </div>
+              </Field>
+
               {/* Quote */}
               <Field label="Quote hiển thị trên Card">
                 <TextArea value={s.quote} onChange={(e) => onUpdate({ quote: e.target.value })} />
               </Field>
 
-              {/* Images */}
+              {/* Images — upload to server */}
               <div>
-                <div className="mb-1.5 flex items-center justify-between">
-                  <span className="font-ui" style={{ fontSize: 12, color: B.inkMuted }}>Ảnh (tối đa 5) — ảnh đầu hiển thị chính</span>
-                  {imgs.filter(Boolean).length < 5 && (
-                    <button
-                      onClick={() => onUpdate({ images: [...imgs, ''] })}
-                      className="h-6 px-2 rounded font-ui inline-flex items-center gap-1"
-                      style={{ background: B.lime, color: B.ink, fontSize: 11, fontWeight: 700 }}>
-                      <Plus size={10} /> Thêm ảnh
-                    </button>
-                  )}
+                <div className="mb-2 font-ui" style={{ fontSize: 12, color: B.inkMuted }}>
+                  Ảnh (tối đa 5) — ảnh đầu hiển thị chính · upload lên server
                 </div>
-                <div className="flex flex-col gap-1.5">
-                  {(imgs.length > 0 ? imgs : ['']).map((url, idx) => (
-                    <div key={idx} className="flex gap-2 items-center">
-                      <div className="shrink-0 rounded overflow-hidden" style={{ width: 44, height: 30, background: B.canvas, border: `1px solid ${B.hairline}` }}>
-                        {url
-                          ? <img src={url} alt="" className="w-full h-full object-cover" onError={(e) => { (e.target as HTMLImageElement).src = PLACEHOLDER_IMG; }} />
-                          : <div className="w-full h-full grid place-items-center" style={{ fontSize: 8, color: B.inkSubtle }}>URL</div>}
+                <div className="grid grid-cols-5 gap-2">
+                  {Array.from({ length: 5 }).map((_, idx) => {
+                    const url = imgs[idx] ?? '';
+                    const isUploading = uploadingIdx.has(idx);
+                    return (
+                      <div key={idx} className="relative group" style={{ aspectRatio: '1' }}>
+                        <label className="block w-full h-full rounded-lg overflow-hidden cursor-pointer"
+                          style={{ background: B.canvas, border: `1.5px dashed ${url ? B.hairline : B.inkSubtle + '44'}` }}>
+                          {url ? (
+                            <img src={url} alt="" className="w-full h-full object-cover"
+                              onError={(e) => { (e.target as HTMLImageElement).src = PLACEHOLDER_IMG; }} />
+                          ) : isUploading ? (
+                            <div className="w-full h-full grid place-items-center">
+                              <div className="font-ui animate-spin" style={{ fontSize: 18, color: B.inkMuted }}>⟳</div>
+                            </div>
+                          ) : (
+                            <div className="w-full h-full grid place-items-center flex-col gap-1">
+                              <ImageIcon size={18} style={{ color: B.inkSubtle }} />
+                              <span className="font-ui block" style={{ fontSize: 9, color: B.inkSubtle, marginTop: 2 }}>
+                                {idx === 0 ? 'Ảnh chính' : `Ảnh ${idx + 1}`}
+                              </span>
+                            </div>
+                          )}
+                          <input type="file" accept="image/*" className="sr-only"
+                            onChange={async (e) => {
+                              const file = e.target.files?.[0];
+                              if (!file) return;
+                              setUploadingIdx(prev => new Set(prev).add(idx));
+                              try {
+                                const compressed = await compressForUpload(file);
+                                const serverUrl = await uploadImage(compressed, file.name);
+                                if (serverUrl) {
+                                  const next = [...imgs];
+                                  while (next.length <= idx) next.push('');
+                                  next[idx] = serverUrl;
+                                  onUpdate({ images: next.filter(Boolean), image: next[0] || provImg });
+                                }
+                              } finally {
+                                setUploadingIdx(prev => { const s = new Set(prev); s.delete(idx); return s; });
+                                e.target.value = '';
+                              }
+                            }} />
+                        </label>
+                        {/* Remove button */}
+                        {url && (
+                          <button
+                            onClick={() => {
+                              const next = [...imgs];
+                              next[idx] = '';
+                              const cleaned = next.filter(Boolean);
+                              onUpdate({ images: cleaned, image: cleaned[0] || provImg });
+                            }}
+                            className="absolute top-0.5 right-0.5 w-5 h-5 rounded-full grid place-items-center opacity-0 group-hover:opacity-100 transition-opacity"
+                            style={{ background: 'rgba(0,0,0,0.55)', color: '#fff' }}>
+                            <X size={10} strokeWidth={2.5} />
+                          </button>
+                        )}
+                        {/* Upload overlay on hover (when has image) */}
+                        {url && !isUploading && (
+                          <label className="absolute inset-0 grid place-items-center opacity-0 group-hover:opacity-100 transition-opacity cursor-pointer rounded-lg"
+                            style={{ background: 'rgba(0,0,0,0.35)' }}>
+                            <Upload size={16} color="#fff" />
+                            <input type="file" accept="image/*" className="sr-only"
+                              onChange={async (e) => {
+                                const file = e.target.files?.[0];
+                                if (!file) return;
+                                setUploadingIdx(prev => new Set(prev).add(idx));
+                                try {
+                                  const compressed = await compressForUpload(file);
+                                  const serverUrl = await uploadImage(compressed, file.name);
+                                  if (serverUrl) {
+                                    const next = [...imgs];
+                                    while (next.length <= idx) next.push('');
+                                    next[idx] = serverUrl;
+                                    onUpdate({ images: next.filter(Boolean), image: next[0] || provImg });
+                                  }
+                                } finally {
+                                  setUploadingIdx(prev => { const s = new Set(prev); s.delete(idx); return s; });
+                                  e.target.value = '';
+                                }
+                              }} />
+                          </label>
+                        )}
                       </div>
-                      <TextInput
-                        value={url}
-                        placeholder={idx === 0 ? (provImg || '(URL ảnh chính)') : '(URL ảnh)'}
-                        onChange={(e) => {
-                          const next = [...(imgs.length > 0 ? imgs : [''])];
-                          next[idx] = e.target.value;
-                          onUpdate({ images: next, image: next[0] || provImg });
-                        }}
-                        style={{ height: 30, fontSize: 11, padding: '0 8px' }}
-                      />
-                      <button
-                        onClick={() => {
-                          const next = (imgs.length > 0 ? imgs : ['']).filter((_, i) => i !== idx);
-                          onUpdate({ images: next, image: next[0] || provImg });
-                        }}
-                        className="h-7 w-7 shrink-0 rounded grid place-items-center"
-                        style={{ background: B.canvas, border: `1px solid ${B.hairline}` }}>
-                        <Trash2 size={11} />
-                      </button>
-                    </div>
-                  ))}
+                    );
+                  })}
                 </div>
               </div>
 
@@ -1018,6 +1436,12 @@ function SubLocationCard({
   );
 }
 
+const STATUS_LABEL: Record<'locked' | 'flagged' | 'visited', string> = {
+  locked:  'Chưa đến',
+  flagged: 'Đã ghé',
+  visited: 'Hoàn thành',
+};
+
 function StatusButton({ status, onChange }: { status: 'locked' | 'flagged' | 'visited'; onChange: (s: 'locked' | 'flagged' | 'visited') => void }) {
   const next = status === 'locked' ? 'flagged' : status === 'flagged' ? 'visited' : 'locked';
   const colors = {
@@ -1028,7 +1452,7 @@ function StatusButton({ status, onChange }: { status: 'locked' | 'flagged' | 'vi
   return (
     <button onClick={() => onChange(next)} className="h-9 px-2 rounded font-ui"
       style={{ background: colors.bg, color: colors.fg, fontSize: 12, borderRadius: B.radiusPill, border: `1px solid ${B.hairline}`, padding: '0 12px' }}>
-      {status}
+      {STATUS_LABEL[status]}
     </button>
   );
 }

@@ -42,7 +42,10 @@ export type AppSettings = {
     totalKm: number;
     currentKm: number;
   };
-  initialPoints: number;
+  /** Tổng số dư Ví Point — tích lũy qua các mini game, persist qua sessions */
+  viPoint: number;
+  /** @deprecated dùng viPoint thay thế */
+  initialPoints?: number;
   admin: {
     /** SHA-256 hex của mật khẩu. Rỗng = mặc định "admin". */
     passwordHash: string;
@@ -62,7 +65,7 @@ export const DEFAULT_SETTINGS: AppSettings = {
     currentStop: 'Hà Giang',
   },
   trip: { totalKm: DEFAULT_TOTAL_KM, currentKm: DEFAULT_CURRENT_KM },
-  initialPoints: 180,
+  viPoint: 180,
   admin: { passwordHash: '' },
   episodeColors: { ...DEFAULT_EPISODE_COLORS },
   badges: DEFAULT_BADGES.map((b) => ({ ...b })),
@@ -86,10 +89,18 @@ function readStorage(): AppSettings {
       admin: { ...DEFAULT_SETTINGS.admin, ...(parsed.admin ?? {}) },
       episodeColors: { ...DEFAULT_SETTINGS.episodeColors, ...(parsed.episodeColors ?? {}) },
       badges: parsed.badges ?? DEFAULT_SETTINGS.badges,
-      provinces: parsed.provinces ?? DEFAULT_SETTINGS.provinces,
+      provinces: (() => {
+        const base = parsed.provinces ?? DEFAULT_SETTINGS.provinces;
+        const protectedProvs = DEFAULT_SETTINGS.provinces.filter(p => p.protected);
+        const ids = new Set(base.map(p => p.id));
+        const missing = protectedProvs.filter(p => !ids.has(p.id));
+        return missing.length ? [...base, ...missing] : base;
+      })(),
       subLocations: parsed.subLocations ?? DEFAULT_SETTINGS.subLocations,
       videos: parsed.videos ?? DEFAULT_SETTINGS.videos,
       videoCategories: parsed.videoCategories ?? DEFAULT_SETTINGS.videoCategories,
+      // migrate: nếu có initialPoints cũ thì dùng làm viPoint
+      viPoint: parsed.viPoint ?? (parsed as any).initialPoints ?? DEFAULT_SETTINGS.viPoint,
     };
   } catch {
     return DEFAULT_SETTINGS;
@@ -224,9 +235,17 @@ export async function pullSettings(): Promise<boolean> {
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
     const data = await res.json();
     if (data && data.settings) {
+      const mergedProvinces = (() => {
+        const base: Province[] = data.settings.provinces ?? DEFAULT_SETTINGS.provinces;
+        const protectedProvs = DEFAULT_SETTINGS.provinces.filter(p => p.protected);
+        const ids = new Set(base.map(p => p.id));
+        const missing = protectedProvs.filter(p => !ids.has(p.id));
+        return missing.length ? [...base, ...missing] : base;
+      })();
       const merged: AppSettings = {
         ...DEFAULT_SETTINGS,
         ...data.settings,
+        provinces: mergedProvinces,
         header: { ...DEFAULT_SETTINGS.header, ...(data.settings.header ?? {}) },
         trip: { ...DEFAULT_SETTINGS.trip, ...(data.settings.trip ?? {}) },
         admin: { ...DEFAULT_SETTINGS.admin, ...(data.settings.admin ?? {}) },
@@ -246,13 +265,15 @@ export async function pullSettings(): Promise<boolean> {
 
 export async function pushSettings(value?: AppSettings): Promise<boolean> {
   setSync('pushing');
+  // Pass admin token as query param to avoid CORS preflight blocking custom headers
+  const tok = getAdminToken();
+  const url = tok ? `${API_BASE}/settings?adminToken=${encodeURIComponent(tok)}` : `${API_BASE}/settings`;
   try {
-    const res = await fetch(`${API_BASE}/settings`, {
+    const res = await fetch(url, {
       method: 'PUT',
       headers: {
         'Content-Type': 'application/json',
         Authorization: `Bearer ${publicAnonKey}`,
-        'x-admin-token': getAdminToken(),
       },
       body: JSON.stringify({ settings: value ?? state }),
     });
@@ -405,6 +426,87 @@ export async function deleteCategory(id: number): Promise<boolean> {
     const res = await fetch(`${API_BASE}/categories/${id}`, {
       method: 'DELETE',
       headers: { Authorization: `Bearer ${publicAnonKey}`, 'x-admin-token': getAdminToken() },
+    });
+    return res.ok;
+  } catch { return false; }
+}
+
+// ── Image upload to Supabase Storage ─────────────────────────────────────────
+
+export async function uploadImage(base64: string, filename = 'image.jpg'): Promise<string | null> {
+  const tok = getAdminToken();
+  const url = tok
+    ? `${API_BASE}/upload?adminToken=${encodeURIComponent(tok)}`
+    : `${API_BASE}/upload`;
+  try {
+    const contentType = base64.startsWith('data:image/png') ? 'image/png' : 'image/jpeg';
+    const res = await fetch(url, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${publicAnonKey}` },
+      body: JSON.stringify({ data: base64, filename, contentType }),
+    });
+    if (!res.ok) return null;
+    return (await res.json()).url ?? null;
+  } catch { return null; }
+}
+
+// ── Ví Point API ─────────────────────────────────────────────────────────────
+
+/** Cộng điểm vào Ví Point — cập nhật store ngay, đồng bộ server trong nền */
+export function earnViPoint(amount: number): void {
+  const next = (state.viPoint ?? 0) + amount;
+  setSettings({ ...state, viPoint: next });
+  // Sync to server in background (fire & forget)
+  fetch(`${API_BASE}/vi-point/add`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${publicAnonKey}` },
+    body: JSON.stringify({ amount }),
+  }).catch(() => {});
+}
+
+/** Admin đặt số dư Ví Point */
+export async function setViPointBalance(balance: number): Promise<boolean> {
+  const tok = getAdminToken();
+  const url = tok
+    ? `${API_BASE}/vi-point?adminToken=${encodeURIComponent(tok)}`
+    : `${API_BASE}/vi-point`;
+  try {
+    const res = await fetch(url, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${publicAnonKey}` },
+      body: JSON.stringify({ balance }),
+    });
+    return res.ok;
+  } catch { return false; }
+}
+
+/** Admin cập nhật trip (totalKm, currentKm) */
+export async function patchTrip(updates: Partial<AppSettings['trip']>): Promise<boolean> {
+  const tok = getAdminToken();
+  const url = tok
+    ? `${API_BASE}/trip?adminToken=${encodeURIComponent(tok)}`
+    : `${API_BASE}/trip`;
+  try {
+    const res = await fetch(url, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${publicAnonKey}` },
+      body: JSON.stringify(updates),
+    });
+    return res.ok;
+  } catch { return false; }
+}
+
+/** Admin cập nhật header (currentStop, avatarText, typewriterNames) */
+export async function patchHeader(updates: Partial<AppSettings['header']>): Promise<boolean> {
+  const tok = getAdminToken();
+  const url = tok
+    ? `${API_BASE}/header?adminToken=${encodeURIComponent(tok)}`
+    : `${API_BASE}/header`;
+  try {
+    const res = await fetch(url, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${publicAnonKey}` },
+      body: JSON.stringify(updates),
     });
     return res.ok;
   } catch { return false; }
