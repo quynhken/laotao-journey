@@ -686,3 +686,28 @@ export async function patchHeader(updates: Partial<AppSettings['header']>): Prom
     return res.ok;
   } catch { return false; }
 }
+
+// ── Reactions ─────────────────────────────────────────────────────────────────
+
+export type ReactionType = 'like' | 'dislike' | 'share';
+export type ReactionCounts = { like: number; dislike: number; share: number };
+
+export async function fetchReactions(): Promise<Record<string, ReactionCounts>> {
+  try {
+    const res = await fetch(`${API_BASE}/reactions`, { headers: { Authorization: `Bearer ${publicAnonKey}` } });
+    if (!res.ok) return {};
+    return (await res.json()).reactions ?? {};
+  } catch { return {}; }
+}
+
+export async function recordReaction(subId: number, type: ReactionType): Promise<ReactionCounts | null> {
+  try {
+    const res = await fetch(`${API_BASE}/reactions/${subId}/${type}`, {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${publicAnonKey}` },
+    });
+    if (!res.ok) return null;
+    const data = await res.json();
+    return { like: data.like ?? 0, dislike: data.dislike ?? 0, share: data.share ?? 0 };
+  } catch { return null; }
+}

@@ -1,8 +1,8 @@
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useEffect } from 'react';
 import { motion, useMotionValue, useTransform, AnimatePresence } from 'motion/react';
-import { Navigation, Heart, X, Share2 } from 'lucide-react';
+import { Navigation, Heart, X, Share2, ThumbsDown } from 'lucide-react';
 import { ImageWithFallback } from './figma/ImageWithFallback';
-import { useSettings, setSettings, patchSubLocation } from '../store';
+import { useSettings, setSettings, patchSubLocation, fetchReactions, recordReaction, type ReactionCounts } from '../store';
 import type { SubLocation } from './data';
 
 type Action = 'flag' | 'skip' | 'wishlist';
@@ -39,6 +39,18 @@ export function DiscoverTab({
 
   const [stack, setStack] = useState<SubLocation[]>(allSubs);
   const [reviewing, setReviewing] = useState<SubLocation | null>(null);
+  const [reactions, setReactions] = useState<Record<string, ReactionCounts>>({});
+
+  useEffect(() => {
+    fetchReactions().then(setReactions);
+  }, []);
+
+  const topReactions = (id: number): ReactionCounts => reactions[String(id)] ?? { like: 0, dislike: 0, share: 0 };
+
+  const react = async (id: number, type: 'like' | 'dislike' | 'share') => {
+    const updated = await recordReaction(id, type);
+    if (updated) setReactions(prev => ({ ...prev, [String(id)]: updated }));
+  };
 
   const handleDone = (action: Action) => {
     const top = stack[0];
@@ -106,53 +118,52 @@ export function DiscoverTab({
         </AnimatePresence>
       </div>
 
-      <div className="flex items-center justify-center gap-10 mt-6">
-        {[
-          {
-            icon: <X size={22} strokeWidth={2.5} />,
-            label: 'Bỏ qua',
-            count: top ? fmtNum(top.reviews ?? 0) : null,
-            onClick: () => handleDone('skip'),
-            btnStyle: { border: '2px solid #F97316', background: 'var(--bg-base)', color: '#F97316' },
-          },
-          {
-            icon: <Share2 size={22} strokeWidth={2} />,
-            label: 'Share',
-            count: null as string | null,
-            onClick: async () => {
-              if (!top) return;
-              const img = (top.images?.[0] || top.image) ?? '';
-              const text = `${top.name} — ${top.province}\n${top.quote ? top.quote.replace(/"/g, '') : ''}`;
-              const url = window.location.origin;
-              if (navigator.share) {
-                try {
-                  await navigator.share({ title: top.name, text, url });
-                } catch {}
-              } else {
-                await navigator.clipboard.writeText(`${top.name}\n${text}\n${url}`).catch(() => {});
-                alert('Đã copy vào clipboard!');
-              }
-            },
-            btnStyle: { border: '2px solid var(--border-default)', background: 'var(--bg-base)', color: 'var(--text-secondary)' },
-          },
-          {
-            icon: <Heart size={22} strokeWidth={2} fill="currentColor" />,
-            label: 'Thả tim',
-            count: top ? fmtNum(top.rating ? Math.round(top.rating * 100) : 0) : null,
-            onClick: () => handleDone('flag'),
-            btnStyle: { border: 'none', background: 'var(--accent-500)', color: '#fff' },
-          },
-        ].map(({ icon, label, count, onClick, btnStyle }) => (
-          <button key={label} onClick={onClick} className="flex flex-col items-center gap-1.5 active:scale-95 transition">
-            <div className="grid place-items-center rounded-full"
-              style={{ width: 56, height: 56, boxShadow: '0 2px 10px rgba(0,0,0,0.08)', ...btnStyle }}>
-              {icon}
-            </div>
-            <span className="font-ui" style={{ fontSize: 12, color: 'var(--text-secondary)', fontWeight: 600 }}>
-              {count ?? label}
-            </span>
-          </button>
-        ))}
+      <div className="flex items-center justify-center gap-8 mt-6">
+        {/* Không thích */}
+        <button onClick={() => { if (top) { react(top.id, 'dislike'); handleDone('skip'); } }}
+          className="flex flex-col items-center gap-1.5 active:scale-95 transition">
+          <div className="grid place-items-center rounded-full"
+            style={{ width: 56, height: 56, border: '2px solid #F97316', background: 'var(--bg-base)', color: '#F97316', boxShadow: '0 2px 10px rgba(0,0,0,0.08)' }}>
+            <ThumbsDown size={22} strokeWidth={2} />
+          </div>
+          <span className="font-ui" style={{ fontSize: 12, color: 'var(--text-secondary)', fontWeight: 600 }}>
+            {top ? fmtNum(topReactions(top.id).dislike) || 'Không thích' : 'Không thích'}
+          </span>
+        </button>
+
+        {/* Chia sẻ */}
+        <button onClick={async () => {
+          if (!top) return;
+          react(top.id, 'share');
+          const text = `${top.name} — ${top.province}\n${top.quote ? top.quote.replace(/"/g, '') : ''}`;
+          const url = window.location.origin;
+          if (navigator.share) {
+            try { await navigator.share({ title: top.name, text, url }); } catch {}
+          } else {
+            await navigator.clipboard.writeText(`${top.name}\n${text}\n${url}`).catch(() => {});
+            alert('Đã copy vào clipboard!');
+          }
+        }} className="flex flex-col items-center gap-1.5 active:scale-95 transition">
+          <div className="grid place-items-center rounded-full"
+            style={{ width: 56, height: 56, border: '2px solid var(--border-default)', background: 'var(--bg-base)', color: 'var(--text-secondary)', boxShadow: '0 2px 10px rgba(0,0,0,0.08)' }}>
+            <Share2 size={22} strokeWidth={2} />
+          </div>
+          <span className="font-ui" style={{ fontSize: 12, color: 'var(--text-secondary)', fontWeight: 600 }}>
+            {top ? fmtNum(topReactions(top.id).share) || 'Chia sẻ' : 'Chia sẻ'}
+          </span>
+        </button>
+
+        {/* Thích */}
+        <button onClick={() => { if (top) { react(top.id, 'like'); handleDone('flag'); } }}
+          className="flex flex-col items-center gap-1.5 active:scale-95 transition">
+          <div className="grid place-items-center rounded-full"
+            style={{ width: 56, height: 56, border: 'none', background: 'var(--accent-500)', color: '#fff', boxShadow: '0 4px 14px rgba(255,99,31,0.35)' }}>
+            <Heart size={22} strokeWidth={2} fill="currentColor" />
+          </div>
+          <span className="font-ui" style={{ fontSize: 12, color: 'var(--text-secondary)', fontWeight: 600 }}>
+            {top ? fmtNum(topReactions(top.id).like) || 'Thích' : 'Thích'}
+          </span>
+        </button>
       </div>
 
       {reviewing && (

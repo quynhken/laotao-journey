@@ -649,4 +649,35 @@ app.delete("/make-server-ae2dcaa6/categories/:id", async (c) => {
   }
 });
 
+// ── Reactions (like / dislike / share per sublocation) ───────────────────────
+const REACTIONS_KEY = "lao-tao:reactions";
+
+// GET /reactions  — public; returns all reaction counts
+app.get("/make-server-ae2dcaa6/reactions", async (c: any) => {
+  try {
+    const reactions = (await kv.get(REACTIONS_KEY)) ?? {};
+    return c.json({ reactions });
+  } catch (err) {
+    return c.json({ error: String(err) }, 500);
+  }
+});
+
+// POST /reactions/:id/:type  — public; increment like | dislike | share
+app.post("/make-server-ae2dcaa6/reactions/:id/:type", async (c: any) => {
+  try {
+    const id = String(c.req.param("id"));
+    const type = c.req.param("type");
+    if (!["like", "dislike", "share"].includes(type)) {
+      return c.json({ error: "type must be like | dislike | share" }, 400);
+    }
+    const reactions: Record<string, any> = (await kv.get(REACTIONS_KEY)) ?? {};
+    if (!reactions[id]) reactions[id] = { like: 0, dislike: 0, share: 0 };
+    reactions[id][type] = (reactions[id][type] ?? 0) + 1;
+    await kv.set(REACTIONS_KEY, reactions);
+    return c.json({ id, ...reactions[id] });
+  } catch (err) {
+    return c.json({ error: String(err) }, 500);
+  }
+});
+
 Deno.serve(app.fetch);
