@@ -1,7 +1,7 @@
 import { useState, useCallback, useRef, useEffect, useMemo } from 'react';
 import Map, { Marker, NavigationControl } from 'react-map-gl/maplibre';
 import { motion, AnimatePresence } from 'motion/react';
-import { Flag, HelpCircle, Play, X, Lock, MousePointer2, Bike, ChevronLeft, ChevronRight, MapPin, Locate } from 'lucide-react';
+import { Flag, HelpCircle, Play, X, Lock, MousePointer2, ChevronLeft, ChevronRight, MapPin, Locate } from 'lucide-react';
 import 'maplibre-gl/dist/maplibre-gl.css';
 import { type Province, type SubLocation } from './data';
 import { useSettings } from '../store';
@@ -356,8 +356,8 @@ export function MapTab({ flagged, onFlag, onQuiz }: Props) {
         </div>
         <div className="relative h-1.5 rounded-full" style={{ background: 'var(--bg-elevated)' }}>
           <div className="absolute inset-y-0 left-0 rounded-full" style={{ width: `${progressPct}%`, background: 'linear-gradient(90deg,#FFBA80 0%,#FF7B40 60%,#FF631F 100%)', transition: 'width 800ms ease' }} />
-          <div className="absolute flex items-center justify-center" style={{ left: `${progressPct}%`, top: '50%', transform: 'translate(-50%,-50%)', color: 'var(--accent-600)', animation: 'floatBike 2s ease-in-out infinite' }}>
-            <Bike size={14} strokeWidth={2} />
+          <div className="absolute" style={{ left: `${progressPct}%`, top: '50%', transform: 'translate(-50%, -100%)', animation: 'floatBike 2s ease-in-out infinite' }}>
+            <img src="/go.png" alt="bike" style={{ width: 32, height: 24, objectFit: 'contain', filter: 'drop-shadow(0 1px 2px rgba(0,0,0,0.2))' }} />
           </div>
         </div>
         <div className="flex justify-between mt-1.5">

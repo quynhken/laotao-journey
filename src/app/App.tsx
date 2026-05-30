@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { RouterProvider, createBrowserRouter } from 'react-router';
 import { AnimatePresence, motion } from 'motion/react';
-import { Bike, X } from 'lucide-react';
+import { X } from 'lucide-react';
 import { Header } from './components/Header';
 import { TabBar, type TabKey } from './components/TabBar';
 import { MapTab } from './components/MapTab';
@@ -268,11 +268,31 @@ function Onboarding({ name, setName, onStart }: {
           HƠN CẢ MỘT HÀNH TRÌNH
         </p>
 
-        <div className="relative w-full mt-5 h-9">
-          <div className="absolute inset-x-0 top-1/2 h-px" style={{ background: 'var(--border-default)' }} />
-          <div className="absolute flex items-center justify-center"
-            style={{ left: `${bikeX}%`, top: 0, color: 'var(--accent-600)', transition: 'left 40ms linear', width: 28, height: 36 }}>
-            <Bike size={22} strokeWidth={1.8} />
+        <div className="relative w-full mt-5 h-12 overflow-hidden">
+          {/* Road line */}
+          <div className="absolute inset-x-0 bottom-0 h-px" style={{ background: 'var(--border-default)' }} />
+          {/* Bike image with motion effects */}
+          <div className="absolute"
+            style={{
+              left: `${bikeX}%`,
+              bottom: 0,
+              width: 64, height: 48,
+              transition: 'left 40ms linear',
+              animation: 'bikeRide 0.25s ease-in-out infinite',
+            }}>
+            <img src="/go.png" alt="bike" style={{ width: '100%', height: '100%', objectFit: 'contain', filter: 'drop-shadow(2px 2px 3px rgba(0,0,0,0.15))' }} />
+            {/* Dust particles */}
+            <div style={{ position: 'absolute', right: '100%', bottom: 4, display: 'flex', gap: 3 }}>
+              {[1,2,3].map(i => (
+                <div key={i} style={{
+                  width: 4, height: 4, borderRadius: '50%',
+                  background: 'var(--text-tertiary)',
+                  opacity: 0.4 / i,
+                  animation: `dustPuff ${0.3 + i * 0.15}s ease-out infinite ${i * 0.1}s`,
+                  transform: `scale(${1 - i * 0.2})`,
+                }} />
+              ))}
+            </div>
           </div>
         </div>
 
