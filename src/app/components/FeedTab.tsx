@@ -9,9 +9,12 @@ export function FeedTab() {
   const videos = settings.videos;
   const cats = settings.videoCategories ?? [];
 
-  const filtered = activeCatId === 'all'
+  // date stored as "DD.MM" — sort newest first by converting to MM*100+DD
+  const dateVal = (d: string) => { const [dd, mm] = (d ?? '').split('.'); return (parseInt(mm) || 0) * 100 + (parseInt(dd) || 0); };
+  const filtered = (activeCatId === 'all'
     ? videos
-    : videos.filter(v => v.categoryId === activeCatId);
+    : videos.filter(v => v.categoryId === activeCatId)
+  ).slice().sort((a, b) => dateVal(b.date) - dateVal(a.date));
 
   const count = filtered.length;
   const label = activeCatId === 'all'

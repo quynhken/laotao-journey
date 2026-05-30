@@ -144,12 +144,12 @@ export function MapTab({ flagged, onFlag, onQuiz }: Props) {
     setLevel('sub');
     setSelected(null);
     setFilterChip(0);
-    mapGLRef.current?.flyTo({ center: [p.lng, p.lat], zoom: 10, duration: 700 });
-    // Lines will be added after subs are computed — use timeout to let state settle
-    setTimeout(() => {
-      const subs = SUB_LOCATIONS.filter(s => s.provinceId === p.id);
-      applySubLines(subs);
-    }, 100);
+    const subs = SUB_LOCATIONS.filter(s => s.provinceId === p.id);
+    // Fly to the highest-locNum sublocation (furthest point), fallback to province center
+    const topSub = subs.length > 0 ? subs.reduce((a, b) => b.locNum > a.locNum ? b : a) : null;
+    const center: [number, number] = topSub ? [topSub.lng, topSub.lat] : [p.lng, p.lat];
+    mapGLRef.current?.flyTo({ center, zoom: 12, duration: 700 });
+    setTimeout(() => applySubLines(subs), 100);
   }, [applySubLines, SUB_LOCATIONS]);
 
   // ── Back to level 1 ──────────────────────────────────────────────────
