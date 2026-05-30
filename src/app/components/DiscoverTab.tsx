@@ -320,7 +320,7 @@ function ReviewSheet({
           placeholder="Bạn thấy chỗ này thế nào?"
           rows={3}
           className="w-full p-3 outline-none resize-none font-ui"
-          style={{ background: 'var(--bg-surface)', border: '1px solid var(--border-default)', borderRadius: 'var(--radius-md)', fontSize: 14 }}
+          style={{ background: 'var(--bg-surface)', border: '1px solid var(--border-default)', borderRadius: 16, fontSize: 14 }}
         />
         <div className="font-ui text-right" style={{ fontSize: 11, color: 'var(--text-tertiary)' }}>{text.length} / 150</div>
 
@@ -344,11 +344,11 @@ function ReviewSheet({
         </div>
 
         <div className="flex gap-2 pt-2">
-          <button onClick={() => onSubmit(stars, text)} className="flex-1 h-11 rounded-[10px] font-ui"
+          <button onClick={() => onSubmit(stars, text)} className="flex-1 h-11 rounded-full font-ui"
             style={{ background: 'var(--accent-500)', color: '#fff', fontWeight: 700 }}>
             Đăng Review +20đ
           </button>
-          <button onClick={onClose} className="h-11 px-4 rounded-[10px] font-ui"
+          <button onClick={onClose} className="h-11 px-4 rounded-full font-ui"
             style={{ background: 'transparent', color: 'var(--text-secondary)' }}>
             Bỏ qua
           </button>

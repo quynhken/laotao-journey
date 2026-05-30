@@ -26,6 +26,14 @@ export type VideoItem = {
   categoryId?: number;
 };
 
+export type Visitor = {
+  id: number;
+  name: string;
+  joinedAt: string;
+  points: number;
+  lastSeen: string;
+};
+
 export type VideoCategory = {
   id: number;
   name: string;
@@ -47,7 +55,8 @@ export type AppSettings = {
   /** @deprecated dùng viPoint thay thế */
   initialPoints?: number;
   admin: {
-    /** SHA-256 hex của mật khẩu. Rỗng = mặc định "admin". */
+    username: string;
+    /** SHA-256 hex. Rỗng = mặc định "123312". */
     passwordHash: string;
   };
   appAuth: {
@@ -61,6 +70,7 @@ export type AppSettings = {
   subLocations: SubLocation[];
   videos: VideoItem[];
   videoCategories: VideoCategory[];
+  onboardingPhotos: OnboardingPhoto[];
 };
 
 export const DEFAULT_SETTINGS: AppSettings = {
@@ -71,7 +81,7 @@ export const DEFAULT_SETTINGS: AppSettings = {
   },
   trip: { totalKm: DEFAULT_TOTAL_KM, currentKm: DEFAULT_CURRENT_KM },
   viPoint: 180,
-  admin: { passwordHash: '' },
+  admin: { username: 'admin', passwordHash: '' },
   appAuth: { username: 'admin', passwordHash: '' },
   episodeColors: { ...DEFAULT_EPISODE_COLORS },
   badges: DEFAULT_BADGES.map((b) => ({ ...b })),
@@ -79,6 +89,7 @@ export const DEFAULT_SETTINGS: AppSettings = {
   subLocations: DEFAULT_SUBS.map((s) => ({ ...s })),
   videos: [],
   videoCategories: [],
+  onboardingPhotos: [],
 };
 
 function readStorage(): AppSettings {
@@ -92,7 +103,7 @@ function readStorage(): AppSettings {
       ...parsed,
       header: { ...DEFAULT_SETTINGS.header, ...(parsed.header ?? {}) },
       trip: { ...DEFAULT_SETTINGS.trip, ...(parsed.trip ?? {}) },
-      admin: { ...DEFAULT_SETTINGS.admin, ...(parsed.admin ?? {}) },
+      admin: { username: 'admin', ...DEFAULT_SETTINGS.admin, ...(parsed.admin ?? {}) },
       appAuth: { ...DEFAULT_SETTINGS.appAuth, ...(parsed.appAuth ?? {}) },
       episodeColors: { ...DEFAULT_SETTINGS.episodeColors, ...(parsed.episodeColors ?? {}) },
       badges: parsed.badges ?? DEFAULT_SETTINGS.badges,
@@ -106,6 +117,7 @@ function readStorage(): AppSettings {
       subLocations: parsed.subLocations ?? DEFAULT_SETTINGS.subLocations,
       videos: parsed.videos ?? DEFAULT_SETTINGS.videos,
       videoCategories: parsed.videoCategories ?? DEFAULT_SETTINGS.videoCategories,
+      onboardingPhotos: parsed.onboardingPhotos ?? DEFAULT_SETTINGS.onboardingPhotos,
       // migrate: nếu có initialPoints cũ thì dùng làm viPoint
       viPoint: parsed.viPoint ?? (parsed as any).initialPoints ?? DEFAULT_SETTINGS.viPoint,
     };
@@ -204,18 +216,31 @@ export async function setAppCredentials(username: string, password: string): Pro
 
 // ── Admin auth ──────────────────────────────────────────────────────────────
 const AUTH_SESSION_KEY = 'lao-tao:admin-auth';
-const DEFAULT_PASSWORD = 'admin';
+const ADMIN_DEFAULT_PASSWORD = '123312';
 
 export async function sha256Hex(input: string): Promise<string> {
   const buf = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(input));
   return Array.from(new Uint8Array(buf)).map((b) => b.toString(16).padStart(2, '0')).join('');
 }
 
+export async function verifyAdminLogin(username: string, password: string): Promise<boolean> {
+  const stored = state.admin;
+  if (username.trim().toLowerCase() !== (stored.username || 'admin').toLowerCase()) return false;
+  if (!stored.passwordHash) return password === ADMIN_DEFAULT_PASSWORD;
+  const h = await sha256Hex(password);
+  return h === stored.passwordHash;
+}
+
 export async function verifyPassword(input: string): Promise<boolean> {
   const stored = state.admin.passwordHash;
-  if (!stored) return input === DEFAULT_PASSWORD;
+  if (!stored) return input === ADMIN_DEFAULT_PASSWORD;
   const h = await sha256Hex(input);
   return h === stored;
+}
+
+export async function setAdminCredentials(username: string, password: string): Promise<void> {
+  const hash = password ? await sha256Hex(password) : '';
+  setSettings({ ...state, admin: { username: username || 'admin', passwordHash: hash } });
 }
 
 export async function setPassword(plain: string): Promise<void> {
@@ -468,21 +493,24 @@ export async function deleteCategory(id: number): Promise<boolean> {
 
 // ── Image upload to Supabase Storage ─────────────────────────────────────────
 
-export async function uploadImage(base64: string, filename = 'image.jpg'): Promise<string | null> {
+export async function uploadImage(base64: string, filename = 'image.jpg'): Promise<string> {
   const tok = getAdminToken();
-  const url = tok
+  const uploadUrl = tok
     ? `${API_BASE}/upload?adminToken=${encodeURIComponent(tok)}`
     : `${API_BASE}/upload`;
-  try {
-    const contentType = base64.startsWith('data:image/png') ? 'image/png' : 'image/jpeg';
-    const res = await fetch(url, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${publicAnonKey}` },
-      body: JSON.stringify({ data: base64, filename, contentType }),
-    });
-    if (!res.ok) return null;
-    return (await res.json()).url ?? null;
-  } catch { return null; }
+  const contentType = base64.startsWith('data:image/png') ? 'image/png' : 'image/jpeg';
+  const res = await fetch(uploadUrl, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${publicAnonKey}` },
+    body: JSON.stringify({ data: base64, filename, contentType }),
+  });
+  if (!res.ok) {
+    const body = await res.json().catch(() => ({ error: res.statusText }));
+    throw new Error(`[${res.status}] ${body?.error ?? res.statusText}`);
+  }
+  const json = await res.json();
+  if (!json.url) throw new Error('Server không trả về URL ảnh');
+  return json.url;
 }
 
 // ── Ví Point API ─────────────────────────────────────────────────────────────
@@ -491,7 +519,16 @@ export async function uploadImage(base64: string, filename = 'image.jpg'): Promi
 export function earnViPoint(amount: number): void {
   const next = (state.viPoint ?? 0) + amount;
   setSettings({ ...state, viPoint: next });
-  // Sync to server in background (fire & forget)
+  // Sync visitor points to server (fire & forget)
+  const vid = getVisitorId();
+  if (vid) {
+    fetch(`${API_BASE}/visitors/${vid}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${publicAnonKey}` },
+      body: JSON.stringify({ points: next }),
+    }).catch(() => {});
+  }
+  // Legacy vi-point endpoint
   fetch(`${API_BASE}/vi-point/add`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${publicAnonKey}` },
@@ -529,6 +566,74 @@ export async function patchTrip(updates: Partial<AppSettings['trip']>): Promise<
     });
     return res.ok;
   } catch { return false; }
+}
+
+// ── Visitors ─────────────────────────────────────────────────────────────────
+
+const VISITOR_ID_KEY = 'lao-tao:visitorId';
+
+export function getVisitorId(): number | null {
+  try { const v = localStorage.getItem(VISITOR_ID_KEY); return v ? Number(v) : null; } catch { return null; }
+}
+
+export async function registerVisitor(name: string): Promise<void> {
+  try {
+    const res = await fetch(`${API_BASE}/visitors`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${publicAnonKey}` },
+      body: JSON.stringify({ name }),
+    });
+    if (res.ok) {
+      const { visitor } = await res.json();
+      if (visitor?.id) localStorage.setItem(VISITOR_ID_KEY, String(visitor.id));
+    }
+  } catch { /* fire & forget */ }
+}
+
+export async function fetchVisitors(): Promise<Visitor[]> {
+  const tok = getAdminToken();
+  const url = tok ? `${API_BASE}/visitors?adminToken=${encodeURIComponent(tok)}` : `${API_BASE}/visitors`;
+  try {
+    const res = await fetch(url, { headers: { Authorization: `Bearer ${publicAnonKey}` } });
+    if (!res.ok) return [];
+    return (await res.json()).visitors ?? [];
+  } catch { return []; }
+}
+
+export async function deleteVisitor(id: number): Promise<boolean> {
+  const tok = getAdminToken();
+  const url = tok ? `${API_BASE}/visitors/${id}?adminToken=${encodeURIComponent(tok)}` : `${API_BASE}/visitors/${id}`;
+  try {
+    const res = await fetch(url, { method: 'DELETE', headers: { Authorization: `Bearer ${publicAnonKey}` } });
+    return res.ok;
+  } catch { return false; }
+}
+
+// ── Onboarding Photos ─────────────────────────────────────────────────────────
+// Stored in AppSettings.onboardingPhotos — uses existing /upload endpoint, no new deployment needed.
+
+export type OnboardingPhoto = { id: number; url: string; uploadedAt: string };
+
+export function fetchOnboardingPhotos(): Promise<OnboardingPhoto[]> {
+  return Promise.resolve(state.onboardingPhotos ?? []);
+}
+
+export async function uploadOnboardingPhoto(base64: string, _contentType?: string): Promise<OnboardingPhoto> {
+  const filename = `onboarding-${Date.now()}.jpg`;
+  const url = await uploadImage(base64, filename); // throws on failure
+  const current = state.onboardingPhotos ?? [];
+  const maxId = current.reduce((m, p) => Math.max(m, p.id), 0);
+  const photo: OnboardingPhoto = { id: maxId + 1, url, uploadedAt: new Date().toISOString() };
+  setSettings({ ...state, onboardingPhotos: [...current, photo] });
+  await pushSettings();
+  return photo;
+}
+
+export async function deleteOnboardingPhoto(id: number): Promise<boolean> {
+  const next = (state.onboardingPhotos ?? []).filter(p => p.id !== id);
+  setSettings({ ...state, onboardingPhotos: next });
+  await pushSettings();
+  return true;
 }
 
 /** Admin cập nhật header (currentStop, avatarText, typewriterNames) */

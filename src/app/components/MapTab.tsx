@@ -582,25 +582,25 @@ export function MapTab({ flagged, onFlag, onQuiz }: Props) {
               {selected.status !== 'locked' && (
                 <div className="flex gap-2 mt-3">
                   {isFlagged(selected) ? (
-                    <button disabled className="h-9 px-3 rounded-xl font-ui inline-flex items-center gap-1.5 flex-1 justify-center"
+                    <button disabled className="h-9 px-3 rounded-full font-ui inline-flex items-center gap-1.5 flex-1 justify-center"
                       style={{ background: 'var(--success-bg)', border: '1px solid var(--success)', color: 'var(--success)', fontSize: 12, fontWeight: 700 }}>
                       <Flag size={12} strokeWidth={2.5} /> Đã Cắm Cờ
                     </button>
                   ) : (
-                    <button onClick={() => onFlag(selected.id)} className="h-9 px-3 rounded-xl font-ui inline-flex items-center gap-1.5 flex-1 justify-center"
+                    <button onClick={() => onFlag(selected.id)} className="h-9 px-3 rounded-full font-ui inline-flex items-center gap-1.5 flex-1 justify-center"
                       style={{ background: 'var(--accent-500)', color: '#fff', fontSize: 12, fontWeight: 700 }}>
                       <Flag size={12} strokeWidth={2.5} /> Cắm Cờ
                     </button>
                   )}
                   {selected.showQuiz !== false && (
-                    <button onClick={() => onQuiz(selected)} className="h-9 px-3 rounded-xl font-ui inline-flex items-center gap-1"
+                    <button onClick={() => onQuiz(selected)} className="h-9 px-3 rounded-full font-ui inline-flex items-center gap-1"
                       style={{ background: 'var(--bg-surface)', border: '1px solid var(--border-default)', color: 'var(--text-primary)', fontSize: 12, fontWeight: 600 }}>
                       <HelpCircle size={12} strokeWidth={2} /> Quiz
                     </button>
                   )}
                   {selected.videoUrl && (
                     <a href={selected.videoUrl} target="_blank" rel="noopener noreferrer"
-                      className="h-9 px-3 rounded-xl font-ui inline-flex items-center gap-1"
+                      className="h-9 px-3 rounded-full font-ui inline-flex items-center gap-1"
                       style={{ background: '#FF0000', color: '#fff', fontSize: 12, fontWeight: 700, textDecoration: 'none' }}>
                       <Play size={11} fill="#fff" strokeWidth={0} /> Xem
                     </a>

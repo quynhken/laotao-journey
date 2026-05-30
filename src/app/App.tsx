@@ -11,7 +11,7 @@ import { FeedTab } from './components/FeedTab';
 import { QuizModal } from './components/QuizModal';
 import { PredictModal } from './components/PredictModal';
 import { AdminPage } from './components/AdminPage';
-import { useSettings, pullSettings, earnViPoint } from './store';
+import { useSettings, pullSettings, earnViPoint, registerVisitor } from './store';
 import type { Stop } from './components/data';
 
 type Toast = { id: number; label: string; points: number };
@@ -56,9 +56,10 @@ function MainApp() {
     addPoints(100, 'Cắm Cờ');
   };
 
-  if (!onboarded) {
-    return <Onboarding name={name} setName={setName} onStart={() => setOnboarded(true)} />;
-  }
+  const handleOnboardStart = () => {
+    if (name.trim()) registerVisitor(name.trim());
+    setOnboarded(true);
+  };
 
   return (
     <div className="min-h-dvh lg:h-dvh lg:overflow-hidden w-full flex justify-center" style={{ background: 'var(--bg-warm)' }}>
@@ -165,6 +166,29 @@ function MainApp() {
         )}
       </AnimatePresence>
 
+      {/* Onboarding modal */}
+      <AnimatePresence>
+        {!onboarded && (
+          <motion.div
+            className="fixed inset-0 z-50 flex items-end sm:items-center justify-center"
+            style={{ background: 'rgba(17,17,17,0.55)', backdropFilter: 'blur(10px)' }}
+            initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+            transition={{ duration: 0.25 }}
+          >
+            <motion.div
+              initial={{ opacity: 0, y: 60 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: 40 }}
+              transition={{ duration: 0.3, ease: [0, 0, 0.2, 1] }}
+              className="w-full sm:max-w-[420px] overflow-hidden rounded-t-[24px] sm:rounded-[24px]"
+              style={{ background: 'var(--bg-warm)', maxHeight: '92dvh' }}
+            >
+              <Onboarding name={name} setName={setName} onStart={handleOnboardStart} />
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
       {/* Toast — shared across mobile & desktop */}
       <div className="fixed top-16 left-1/2 -translate-x-1/2 z-50 flex flex-col items-center gap-2 pointer-events-none">
         <AnimatePresence>
@@ -203,71 +227,74 @@ function MainApp() {
   );
 }
 
+const FALLBACK_SLIDES = ['/og-image.jpg', '/og-image.jpg', '/og-image.jpg', '/og-image.jpg', '/og-image.jpg'];
+
 function Onboarding({ name, setName, onStart }: {
   name: string; setName: (s: string) => void; onStart: () => void;
 }) {
+  const settings = useSettings();
   const [bikeX, setBikeX] = useState(-40);
+
+  const slides = (settings.onboardingPhotos ?? []).length > 0
+    ? settings.onboardingPhotos.map(p => p.url)
+    : FALLBACK_SLIDES;
+
   useEffect(() => {
     const id = setInterval(() => setBikeX((x) => (x > 110 ? -40 : x + 1.5)), 40);
     return () => clearInterval(id);
   }, []);
 
   return (
-    <div className="min-h-dvh w-full flex justify-center paper-noise"
-      style={{ background: 'var(--bg-warm)' }}>
-      <div className="w-full max-w-[480px] flex flex-col px-6 py-10">
-        <div className="flex-1 flex flex-col items-center justify-center text-center">
-          <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full mb-6"
-            style={{ background: 'var(--accent-100)', border: '1px solid var(--accent-300)', color: 'var(--accent-600)', fontSize: 11, fontWeight: 700, letterSpacing: '0.08em' }}>
-            <Bike size={13} strokeWidth={2} /> COMPANION APP
-          </div>
-          <h1 className="font-display" style={{ fontSize: 42, fontWeight: 800, lineHeight: 1.05, letterSpacing: '-0.02em' }}>
-            Sổ Tay<br />Hành Trình<br />Của <span style={{ color: 'var(--accent-500)' }}>Lão Tào</span>
-          </h1>
-          <p className="font-body italic mt-4" style={{ color: 'var(--text-secondary)', fontSize: 16 }}>
-            "Thôi đi thôi."
-          </p>
-          <p className="font-ui mt-2" style={{ color: 'var(--text-tertiary)', fontSize: 13, maxWidth: 320 }}>
-            Không tốn tiền vé. Không xin phép sếp. Không lo say xe.
-          </p>
+    <div className="flex flex-col paper-noise" style={{ background: 'var(--bg-warm)' }}>
 
-          <div className="relative w-full mt-10 h-12">
-            <div className="absolute inset-x-0 top-1/2 h-px" style={{ background: 'var(--border-default)' }} />
-            <div
-              className="absolute flex items-center justify-center"
-              style={{
-                left: `${bikeX}%`, top: 0,
-                color: 'var(--accent-600)',
-                transition: 'left 40ms linear',
-                width: 32, height: 48,
-              }}
-            >
-              <Bike size={26} strokeWidth={1.8} />
+      {/* Image strip — 3:4, auto-scroll horizontal */}
+      <div className="overflow-hidden pt-5 pb-4">
+        <div className="flex gap-2.5 animate-marquee pl-5" style={{ width: 'max-content' }}>
+          {[...slides, ...slides].map((src, i) => (
+            <div key={i} className="flex-shrink-0 rounded-xl overflow-hidden"
+              style={{ width: 108, aspectRatio: '3/4' }}>
+              <img src={src} alt="" className="w-full h-full object-cover" loading="eager" />
             </div>
-          </div>
+          ))}
+        </div>
+      </div>
 
-          <div className="w-full mt-10 space-y-3">
-            <div className="font-ui text-left" style={{ fontSize: 12, color: 'var(--text-secondary)' }}>
-              Bạn tên gì để Lão Tào gọi?
-            </div>
-            <input
-              value={name}
-              onChange={(e) => setName(e.target.value)}
-              placeholder="VD: Tèo"
-              className="w-full h-12 px-4 outline-none font-ui"
-              style={{ background: 'var(--bg-surface)', border: '1px solid var(--border-default)', borderRadius: 'var(--radius-md)' }}
-            />
-            <button onClick={onStart}
-              className="w-full h-12 rounded-[10px] font-ui transition"
-              style={{ background: 'var(--accent-500)', color: '#fff', fontWeight: 700, fontSize: 15, boxShadow: '0 4px 16px rgba(255,99,31,0.3)' }}>
-              Bắt Đầu Đi Ké →
-            </button>
+      {/* Content — left aligned, compact */}
+      <div className="flex flex-col px-5 pb-6">
+        <h1 className="font-display" style={{ fontSize: 30, fontWeight: 800, lineHeight: 1.08, letterSpacing: '-0.02em' }}>
+          Sổ Tay Hành Trình<br />Của <span style={{ color: 'var(--accent-500)' }}>Lão Tào</span>
+        </h1>
+        <p className="font-ui mt-2" style={{ color: 'var(--text-secondary)', fontSize: 13, fontWeight: 700, letterSpacing: '0.06em' }}>
+          HƠN CẢ MỘT HÀNH TRÌNH
+        </p>
+
+        <div className="relative w-full mt-5 h-9">
+          <div className="absolute inset-x-0 top-1/2 h-px" style={{ background: 'var(--border-default)' }} />
+          <div className="absolute flex items-center justify-center"
+            style={{ left: `${bikeX}%`, top: 0, color: 'var(--accent-600)', transition: 'left 40ms linear', width: 28, height: 36 }}>
+            <Bike size={22} strokeWidth={1.8} />
           </div>
         </div>
 
-        <div className="text-center mt-6 font-ui" style={{ fontSize: 11, color: 'var(--text-tertiary)', letterSpacing: '0.06em' }}>
-          HÀ NỘI → SÀI GÒN · 1.726 KM
+        <div className="w-full mt-4 space-y-2.5">
+          <div className="font-ui" style={{ fontSize: 12, color: 'var(--text-secondary)' }}>
+            Bạn tên gì để Lão Tào gọi?<br />Hãy nhập đúng tên để chơi game tương tác cùng hành trình.
+          </div>
+          <input
+            value={name}
+            onChange={(e) => setName(e.target.value)}
+            onKeyDown={(e) => e.key === 'Enter' && onStart()}
+            placeholder="VD: Tèo"
+            className="w-full h-11 px-4 outline-none font-ui"
+            style={{ background: 'var(--bg-surface)', border: '1px solid var(--border-default)', borderRadius: 9999, fontSize: 15 }}
+          />
+          <button onClick={onStart}
+            className="w-full h-11 rounded-full font-ui transition"
+            style={{ background: 'var(--accent-500)', color: '#fff', fontWeight: 700, fontSize: 15, boxShadow: '0 4px 16px rgba(255,99,31,0.3)' }}>
+            Bắt Đầu Đi Ké →
+          </button>
         </div>
+
       </div>
     </div>
   );

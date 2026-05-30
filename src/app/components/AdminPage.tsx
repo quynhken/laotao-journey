@@ -8,7 +8,12 @@ import {
   type AppSettings,
   type VideoItem,
   verifyPassword,
+  verifyAdminLogin,
   setPassword,
+  setAdminCredentials,
+  fetchVisitors,
+  deleteVisitor,
+  type Visitor,
   isAuthed,
   setAuthed,
   pullSettings,
@@ -27,6 +32,10 @@ import {
   setAppCredentials,
   useSyncStatus,
   type VideoCategory,
+  fetchOnboardingPhotos,
+  uploadOnboardingPhoto,
+  deleteOnboardingPhoto,
+  type OnboardingPhoto,
 } from '../store';
 import type { Badge, Province, SubLocation } from './data';
 
@@ -53,7 +62,7 @@ const B = {
   radiusPill: 100,
 };
 
-type Section = 'header' | 'trip' | 'badges' | 'provinces' | 'sublocations' | 'videos' | 'categories' | 'security';
+type Section = 'header' | 'trip' | 'badges' | 'provinces' | 'sublocations' | 'videos' | 'categories' | 'visitors' | 'onboarding-photos' | 'security';
 
 const SECTIONS: { key: Section; label: string }[] = [
   { key: 'header', label: 'Header' },
@@ -63,6 +72,8 @@ const SECTIONS: { key: Section; label: string }[] = [
   { key: 'sublocations', label: 'Địa Điểm' },
   { key: 'videos', label: 'Nội Dung' },
   { key: 'categories', label: 'Danh Mục' },
+  { key: 'visitors', label: 'Người Dùng' },
+  { key: 'onboarding-photos', label: 'Ảnh Onboarding' },
   { key: 'security', label: 'Bảo Mật' },
 ];
 
@@ -73,16 +84,17 @@ export function AdminPage() {
 }
 
 function LoginGate({ onSuccess }: { onSuccess: () => void }) {
+  const [user, setUser] = useState('');
   const [pw, setPw] = useState('');
   const [err, setErr] = useState('');
   const [busy, setBusy] = useState(false);
   const submit = async (e: React.FormEvent) => {
     e.preventDefault();
     setBusy(true); setErr('');
-    const ok = await verifyPassword(pw);
+    const ok = await verifyAdminLogin(user, pw);
     setBusy(false);
     if (ok) { setAuthed(true, pw); onSuccess(); }
-    else setErr('Mật khẩu không đúng.');
+    else setErr('Sai tên đăng nhập hoặc mật khẩu.');
   };
   return (
     <div className="min-h-dvh w-full grid place-items-center px-5"
@@ -97,16 +109,24 @@ function LoginGate({ onSuccess }: { onSuccess: () => void }) {
           Đăng nhập
         </div>
         <input
-          type="password"
           autoFocus
+          value={user}
+          onChange={(e) => setUser(e.target.value)}
+          placeholder="Tên đăng nhập"
+          autoCapitalize="none" autoCorrect="off"
+          className="w-full h-11 px-4 font-ui outline-none mb-3"
+          style={{ background: B.canvas, border: `1px solid ${B.hairline}`, borderRadius: B.radiusMd, fontSize: 14, color: B.ink }}
+        />
+        <input
+          type="password"
           value={pw}
           onChange={(e) => setPw(e.target.value)}
-          placeholder="Mật khẩu (mặc định: admin)"
+          placeholder="Mật khẩu"
           className="w-full h-11 px-4 font-ui outline-none mb-3"
           style={{ background: B.canvas, border: `1px solid ${B.hairline}`, borderRadius: B.radiusMd, fontSize: 14, color: B.ink }}
         />
         {err && <div className="mb-3" style={{ fontSize: 13, color: B.orange }}>{err}</div>}
-        <button type="submit" disabled={busy}
+        <button type="submit" disabled={busy || !user || !pw}
           className="w-full h-11 font-ui transition"
           style={{ background: B.ink, color: B.canvasPure, borderRadius: B.radiusPill, fontSize: 14, opacity: busy ? 0.6 : 1 }}>
           {busy ? '...' : 'Vào'}
@@ -260,6 +280,8 @@ function AdminPanel({ onLogout }: { onLogout: () => void }) {
           {section === 'sublocations' && <SubLocationsSection draft={draft} setDraft={setDraft} />}
           {section === 'videos' && <VideosSection draft={draft} setDraft={setDraft} />}
           {section === 'categories' && <CategoriesSection draft={draft} setDraft={setDraft} />}
+          {section === 'visitors' && <VisitorsSection />}
+          {section === 'onboarding-photos' && <OnboardingPhotosSection />}
           {section === 'security' && <SecuritySection />}
         </main>
       </div>
@@ -713,10 +735,10 @@ function ProvincesSection({ draft, setDraft }: SP) {
               {isOpen && (() => {
                 const provSubs = draft.subLocations.filter((s) => s.provinceId === p.id).sort((a, b) => a.locNum - b.locNum);
                 const updateSub = (sid: number, patch: Partial<SubLocation>) =>
-                  setDraft({ ...draft, subLocations: draft.subLocations.map((s) => s.id === sid ? { ...s, ...patch } : s) });
+                  setDraft(prev => ({ ...prev, subLocations: prev.subLocations.map((s) => s.id === sid ? { ...s, ...patch } : s) }));
                 const removeSub = (sid: number) => {
                   if (!confirm('Xoá địa điểm này?')) return;
-                  setDraft({ ...draft, subLocations: draft.subLocations.filter((s) => s.id !== sid) });
+                  setDraft(prev => ({ ...prev, subLocations: prev.subLocations.filter((s) => s.id !== sid) }));
                   deleteSubLocation(sid);
                 };
                 const updateSubStatus = (sid: number, status: SubLocation['status']) => {
@@ -727,13 +749,13 @@ function ProvincesSection({ draft, setDraft }: SP) {
                   const idx = provSubs.findIndex((s) => s.id === sid);
                   if (idx <= 0) return;
                   const a = provSubs[idx - 1], b = provSubs[idx];
-                  setDraft({ ...draft, subLocations: draft.subLocations.map((s) => s.id === b.id ? { ...s, locNum: a.locNum } : s.id === a.id ? { ...s, locNum: b.locNum } : s) });
+                  setDraft(prev => ({ ...prev, subLocations: prev.subLocations.map((s) => s.id === b.id ? { ...s, locNum: a.locNum } : s.id === a.id ? { ...s, locNum: b.locNum } : s) }));
                 };
                 const moveSubDown = (sid: number) => {
                   const idx = provSubs.findIndex((s) => s.id === sid);
                   if (idx < 0 || idx >= provSubs.length - 1) return;
                   const a = provSubs[idx], b = provSubs[idx + 1];
-                  setDraft({ ...draft, subLocations: draft.subLocations.map((s) => s.id === a.id ? { ...s, locNum: b.locNum } : s.id === b.id ? { ...s, locNum: a.locNum } : s) });
+                  setDraft(prev => ({ ...prev, subLocations: prev.subLocations.map((s) => s.id === a.id ? { ...s, locNum: b.locNum } : s.id === b.id ? { ...s, locNum: a.locNum } : s) }));
                 };
                 const onDragOver = (e: React.DragEvent) => e.preventDefault();
                 const onDrop = (e: React.DragEvent, targetId: number) => {
@@ -747,20 +769,22 @@ function ProvincesSection({ draft, setDraft }: SP) {
                   const [moved] = reordered.splice(fromIdx, 1);
                   reordered.splice(toIdx, 0, moved);
                   const nums = new Map(reordered.map((s, i) => [s.id, i + 1]));
-                  setDraft({ ...draft, subLocations: draft.subLocations.map((s) => nums.has(s.id) ? { ...s, locNum: nums.get(s.id)! } : s) });
+                  setDraft(prev => ({ ...prev, subLocations: prev.subLocations.map((s) => nums.has(s.id) ? { ...s, locNum: nums.get(s.id)! } : s) }));
                   dragItemRef.current = null;
                 };
                 const addSub = () => {
-                  const inProv = draft.subLocations.filter((s) => s.provinceId === p.id);
-                  const nextId = draft.subLocations.reduce((m, s) => Math.max(m, s.id), 0) + 1;
-                  const nextLoc = inProv.reduce((m, s) => Math.max(m, s.locNum), 0) + 1;
-                  const ns: SubLocation = {
-                    id: nextId, provinceId: p.id, episode: p.episode, locNum: nextLoc,
-                    name: 'Địa điểm mới', province: p.name, region: p.region,
-                    km: 0, date: '—', quote: '"..."',
-                    image: p.image, status: 'locked', lat: p.lat, lng: p.lng,
-                  };
-                  setDraft({ ...draft, subLocations: [...draft.subLocations, ns] });
+                  setDraft(prev => {
+                    const inProv = prev.subLocations.filter((s) => s.provinceId === p.id);
+                    const nextId = prev.subLocations.reduce((m, s) => Math.max(m, s.id), 0) + 1;
+                    const nextLoc = inProv.reduce((m, s) => Math.max(m, s.locNum), 0) + 1;
+                    const ns: SubLocation = {
+                      id: nextId, provinceId: p.id, episode: p.episode, locNum: nextLoc,
+                      name: 'Địa điểm mới', province: p.name, region: p.region,
+                      km: 0, date: '—', quote: '"..."',
+                      image: p.image, status: 'locked', lat: p.lat, lng: p.lng,
+                    };
+                    return { ...prev, subLocations: [...prev.subLocations, ns] };
+                  });
                 };
                 return (
                   <div className="pb-2 px-3" style={{ background: `rgba(35,37,41,0.02)` }}>
@@ -996,27 +1020,30 @@ function SubLocationsSection({ draft, setDraft }: SP) {
     setExpandedPids((prev) => { const s = new Set(prev); s.has(id) ? s.delete(id) : s.add(id); return s; });
 
   const update = (id: number, patch: Partial<SubLocation>) => {
-    setDraft({ ...draft, subLocations: draft.subLocations.map((s) => (s.id === id ? { ...s, ...patch } : s)) });
+    setDraft(prev => ({ ...prev, subLocations: prev.subLocations.map((s) => (s.id === id ? { ...s, ...patch } : s)) }));
     if ('status' in patch) patchSubLocation(id, { status: patch.status });
     if ('images' in patch || 'image' in patch) patchSubLocation(id, { images: patch.images, image: patch.image });
   };
   const remove = (id: number) => {
     if (!confirm('Xoá địa điểm này?')) return;
-    setDraft({ ...draft, subLocations: draft.subLocations.filter((s) => s.id !== id) });
+    setDraft(prev => ({ ...prev, subLocations: prev.subLocations.filter((s) => s.id !== id) }));
     deleteSubLocation(id);
   };
   const add = (targetPid: number) => {
-    const prov = draft.provinces.find((p) => p.id === targetPid)!;
-    const inProv = draft.subLocations.filter((s) => s.provinceId === targetPid);
-    const nextId = draft.subLocations.reduce((m, s) => Math.max(m, s.id), 0) + 1;
-    const nextLoc = inProv.reduce((m, s) => Math.max(m, s.locNum), 0) + 1;
-    const ns: SubLocation = {
-      id: nextId, provinceId: targetPid, episode: prov.episode, locNum: nextLoc,
-      name: 'Địa điểm mới', province: prov.name, region: prov.region,
-      km: 0, date: '—', quote: '"..."',
-      image: prov.image, status: 'locked', lat: prov.lat, lng: prov.lng,
-    };
-    setDraft({ ...draft, subLocations: [...draft.subLocations, ns] });
+    setDraft(prev => {
+      const prov = prev.provinces.find((p) => p.id === targetPid)!;
+      if (!prov) return prev;
+      const inProv = prev.subLocations.filter((s) => s.provinceId === targetPid);
+      const nextId = prev.subLocations.reduce((m, s) => Math.max(m, s.id), 0) + 1;
+      const nextLoc = inProv.reduce((m, s) => Math.max(m, s.locNum), 0) + 1;
+      const ns: SubLocation = {
+        id: nextId, provinceId: targetPid, episode: prov.episode, locNum: nextLoc,
+        name: 'Địa điểm mới', province: prov.name, region: prov.region,
+        km: 0, date: '—', quote: '"..."',
+        image: prov.image, status: 'locked', lat: prov.lat, lng: prov.lng,
+      };
+      return { ...prev, subLocations: [...prev.subLocations, ns] };
+    });
     setExpandedPids((prev) => new Set(prev).add(targetPid));
   };
 
@@ -1377,12 +1404,12 @@ function SubLocationCard({
                               try {
                                 const compressed = await compressForUpload(file);
                                 const serverUrl = await uploadImage(compressed, file.name);
-                                if (serverUrl) {
-                                  const next = [...imgs];
-                                  while (next.length <= idx) next.push('');
-                                  next[idx] = serverUrl;
-                                  onUpdate({ images: next.filter(Boolean), image: next[0] || provImg });
-                                }
+                                const next = [...imgs];
+                                while (next.length <= idx) next.push('');
+                                next[idx] = serverUrl;
+                                onUpdate({ images: next.filter(Boolean), image: next[0] || provImg });
+                              } catch (uploadErr: any) {
+                                alert(`Lỗi upload: ${uploadErr?.message ?? uploadErr}`);
                               } finally {
                                 setUploadingIdx(prev => { const s = new Set(prev); s.delete(idx); return s; });
                                 e.target.value = '';
@@ -1416,12 +1443,12 @@ function SubLocationCard({
                                 try {
                                   const compressed = await compressForUpload(file);
                                   const serverUrl = await uploadImage(compressed, file.name);
-                                  if (serverUrl) {
-                                    const next = [...imgs];
-                                    while (next.length <= idx) next.push('');
-                                    next[idx] = serverUrl;
-                                    onUpdate({ images: next.filter(Boolean), image: next[0] || provImg });
-                                  }
+                                  const next = [...imgs];
+                                  while (next.length <= idx) next.push('');
+                                  next[idx] = serverUrl;
+                                  onUpdate({ images: next.filter(Boolean), image: next[0] || provImg });
+                                } catch (uploadErr: any) {
+                                  alert(`Lỗi upload: ${uploadErr?.message ?? uploadErr}`);
                                 } finally {
                                   setUploadingIdx(prev => { const s = new Set(prev); s.delete(idx); return s; });
                                   e.target.value = '';
@@ -1883,52 +1910,252 @@ function CategoriesSection({ draft, setDraft }: SP) {
   );
 }
 
-function SecuritySection() {
-  const settings = useSettings();
+function VisitorsSection() {
+  const [visitors, setVisitors] = useState<Visitor[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [q, setQ] = useState('');
+  const [sortBy, setSortBy] = useState<'points' | 'joined'>('points');
 
-  // Admin panel password
-  const [cur, setCur] = useState('');
-  const [pw1, setPw1] = useState('');
-  const [pw2, setPw2] = useState('');
-  const [msg, setMsg] = useState<{ kind: 'ok' | 'err'; text: string } | null>(null);
-  const hasPw = !!settings.admin.passwordHash;
-  const submit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setMsg(null);
-    const ok = await verifyPassword(cur);
-    if (!ok) return setMsg({ kind: 'err', text: 'Mật khẩu hiện tại sai.' });
-    if (pw1.length < 4) return setMsg({ kind: 'err', text: 'Mật khẩu mới ≥ 4 ký tự.' });
-    if (pw1 !== pw2) return setMsg({ kind: 'err', text: 'Xác nhận mật khẩu không khớp.' });
-    await setPassword(pw1);
-    setCur(''); setPw1(''); setPw2('');
-    setMsg({ kind: 'ok', text: 'Đã đổi mật khẩu.' });
+  const load = () => { setLoading(true); fetchVisitors().then(v => { setVisitors(v); setLoading(false); }); };
+  useEffect(() => { load(); }, []);
+
+  const remove = async (id: number) => {
+    if (!confirm('Xoá người dùng này?')) return;
+    await deleteVisitor(id);
+    setVisitors(prev => prev.filter(v => v.id !== id));
+  };
+
+  const filtered = visitors
+    .filter(v => !q || v.name.toLowerCase().includes(q.toLowerCase()))
+    .sort((a, b) => sortBy === 'points' ? (b.points ?? 0) - (a.points ?? 0) : b.id - a.id);
+
+  const fmt = (iso: string) => {
+    try {
+      const d = new Date(iso);
+      return `${d.getDate().toString().padStart(2,'0')}/${(d.getMonth()+1).toString().padStart(2,'0')}/${d.getFullYear()} ${d.getHours().toString().padStart(2,'0')}:${d.getMinutes().toString().padStart(2,'0')}`;
+    } catch { return iso; }
+  };
+
+  const totalPoints = visitors.reduce((s, v) => s + (v.points ?? 0), 0);
+
+  return (
+    <>
+      <SectionTitle hint="Danh sách người dùng đã nhập tên khi vào trang. Điểm được đồng bộ tự động khi họ chơi.">
+        Người Dùng
+      </SectionTitle>
+
+      {/* Stats row */}
+      <div className="grid grid-cols-3 gap-3 mb-4">
+        {[
+          { label: 'Tổng người dùng', value: visitors.length },
+          { label: 'Tổng điểm tích luỹ', value: totalPoints.toLocaleString() + 'đ' },
+          { label: 'Trung bình điểm', value: visitors.length ? Math.round(totalPoints / visitors.length).toLocaleString() + 'đ' : '—' },
+        ].map(s => (
+          <div key={s.label} className="rounded-xl p-3" style={{ background: B.canvasPure, border: `1px solid ${B.hairline}` }}>
+            <div className="font-ui" style={{ fontSize: 10, color: B.inkMuted, letterSpacing: '0.04em' }}>{s.label}</div>
+            <div className="font-display mt-1" style={{ fontSize: 20, fontWeight: 700, color: B.ink }}>{s.value}</div>
+          </div>
+        ))}
+      </div>
+
+      <div className="mb-3 flex items-center gap-2 flex-wrap">
+        <TextInput placeholder="Tìm theo tên..." value={q} onChange={e => setQ(e.target.value)} />
+        <div className="flex gap-1">
+          {(['points', 'joined'] as const).map(s => (
+            <button key={s} onClick={() => setSortBy(s)}
+              className="h-8 px-3 rounded-full font-ui"
+              style={{ fontSize: 11, fontWeight: 600, background: sortBy === s ? B.orange : B.canvas, color: sortBy === s ? '#fff' : B.inkMuted, border: `1px solid ${sortBy === s ? B.orange : B.hairline}` }}>
+              {s === 'points' ? '↓ Điểm' : '↓ Mới nhất'}
+            </button>
+          ))}
+        </div>
+        <span className="font-ui shrink-0 ml-auto" style={{ fontSize: 12, color: B.inkMuted }}>{filtered.length} / {visitors.length}</span>
+        <button onClick={load} className="h-8 px-3 rounded font-ui inline-flex items-center gap-1"
+          style={{ background: B.canvas, border: `1px solid ${B.hairline}`, fontSize: 12, color: B.inkMuted }}>
+          <RotateCcw size={11} /> Làm mới
+        </button>
+      </div>
+
+      {loading ? (
+        <div className="font-ui py-8 text-center" style={{ fontSize: 13, color: B.inkMuted }}>Đang tải...</div>
+      ) : visitors.length === 0 ? (
+        <div className="font-ui py-8 text-center" style={{ fontSize: 13, color: B.inkSubtle }}>
+          Chưa có người dùng nào. Họ sẽ xuất hiện khi ai đó nhập tên và vào trang.
+        </div>
+      ) : (
+        <div className="rounded-lg overflow-hidden" style={{ border: `1px solid ${B.hairline}` }}>
+          <div className="grid px-4 py-2 font-ui"
+            style={{ gridTemplateColumns: '28px 1fr 80px 140px 32px', background: B.canvas, fontSize: 11, fontWeight: 700, color: B.inkMuted }}>
+            <div>#</div><div>Tên</div><div>Điểm</div><div>Hoạt động lần cuối</div><div></div>
+          </div>
+          {filtered.map((v, i) => (
+            <div key={v.id} className="grid px-4 py-2.5 items-center"
+              style={{ gridTemplateColumns: '28px 1fr 80px 140px 32px', borderTop: `1px solid ${B.hairline}` }}>
+              <span className="font-ui" style={{ fontSize: 11, color: B.inkSubtle }}>{i + 1}</span>
+              <span className="font-ui" style={{ fontSize: 14, fontWeight: 600, color: B.ink }}>{v.name}</span>
+              <span className="font-ui" style={{ fontSize: 13, fontWeight: 700, color: (v.points ?? 0) > 0 ? B.orange : B.inkSubtle }}>
+                {(v.points ?? 0) > 0 ? `${(v.points).toLocaleString()}đ` : '—'}
+              </span>
+              <span className="font-ui" style={{ fontSize: 11, color: B.inkMuted }}>{fmt(v.lastSeen ?? v.joinedAt)}</span>
+              <button onClick={() => remove(v.id)}
+                className="h-7 w-7 rounded grid place-items-center"
+                style={{ background: B.canvas, border: `1px solid ${B.hairline}` }}>
+                <Trash2 size={11} style={{ color: B.inkMuted }} />
+              </button>
+            </div>
+          ))}
+        </div>
+      )}
+    </>
+  );
+}
+
+function OnboardingPhotosSection() {
+  const settings = useSettings();
+  const photos = settings.onboardingPhotos ?? [];
+  const [uploading, setUploading] = useState(false);
+  const [err, setErr] = useState('');
+  const fileRef = useRef<HTMLInputElement>(null);
+
+  const handleFiles = async (files: FileList | null) => {
+    if (!files?.length) return;
+    setErr('');
+    setUploading(true);
+    for (const file of Array.from(files)) {
+      try {
+        const compressed = await compressForUpload(file, 1200, 0.88);
+        await uploadOnboardingPhoto(compressed);
+      } catch (e: any) {
+        setErr(e?.message ?? 'Tải lên thất bại');
+        break;
+      }
+    }
+    setUploading(false);
+  };
+
+  const remove = async (id: number) => {
+    if (!confirm('Xoá ảnh này?')) return;
+    await deleteOnboardingPhoto(id);
   };
 
   return (
     <>
-      <SectionTitle hint={hasPw ? 'Đổi mật khẩu đăng nhập trang /admin.' : 'Mặc định là "admin". Đặt mật khẩu mới ngay.'}>
-        Bảo Mật
+      <SectionTitle hint="Ảnh hiển thị trong slide onboarding. Tỉ lệ 3:4 đẹp nhất.">
+        Ảnh Onboarding
       </SectionTitle>
 
+      <input ref={fileRef} type="file" accept="image/*" multiple className="hidden"
+        onChange={e => { handleFiles(e.target.files); e.target.value = ''; }} />
+      <button onClick={() => fileRef.current?.click()} disabled={uploading}
+        className="mb-3 h-10 px-4 rounded-full font-ui inline-flex items-center gap-2"
+        style={{ background: B.orange, color: '#fff', fontSize: 13, fontWeight: 700, opacity: uploading ? 0.6 : 1 }}>
+        <ImageIcon size={14} /> {uploading ? 'Đang tải lên...' : 'Thêm ảnh'}
+      </button>
+      {err && <div className="mb-3 font-ui" style={{ fontSize: 12, color: B.danger }}>{err}</div>}
+
+      {photos.length === 0 ? (
+        <div
+          className="rounded-xl flex flex-col items-center justify-center gap-3 cursor-pointer"
+          style={{ border: `2px dashed ${B.hairline}`, minHeight: 160, color: B.inkSubtle }}
+          onClick={() => fileRef.current?.click()}
+        >
+          <ImageIcon size={32} strokeWidth={1.5} />
+          <span className="font-ui" style={{ fontSize: 13 }}>Chưa có ảnh. Nhấn để upload.</span>
+        </div>
+      ) : (
+        <div className="grid gap-3" style={{ gridTemplateColumns: 'repeat(auto-fill, minmax(120px, 1fr))' }}>
+          {photos.map(p => (
+            <div key={p.id} className="relative rounded-xl overflow-hidden group" style={{ aspectRatio: '3/4' }}>
+              <img src={p.url} alt="" className="w-full h-full object-cover" />
+              <div className="absolute inset-0 flex items-center justify-center opacity-0 group-hover:opacity-100 transition"
+                style={{ background: 'rgba(0,0,0,0.45)' }}>
+                <button onClick={() => remove(p.id)}
+                  className="h-8 w-8 rounded-full grid place-items-center"
+                  style={{ background: '#fff' }}>
+                  <Trash2 size={14} style={{ color: B.orange }} />
+                </button>
+              </div>
+            </div>
+          ))}
+          <div
+            className="rounded-xl flex items-center justify-center cursor-pointer transition"
+            style={{ aspectRatio: '3/4', border: `2px dashed ${B.hairline}`, color: B.inkSubtle }}
+            onClick={() => fileRef.current?.click()}
+          >
+            <Plus size={24} strokeWidth={1.5} />
+          </div>
+        </div>
+      )}
+    </>
+  );
+}
+
+function SecuritySection() {
+  const settings = useSettings();
+
+  const [curUser, setCurUser] = useState('');
+  const [curPw, setCurPw] = useState('');
+  const [newUser, setNewUser] = useState('');
+  const [newPw1, setNewPw1] = useState('');
+  const [newPw2, setNewPw2] = useState('');
+  const [msg, setMsg] = useState<{ kind: 'ok' | 'err'; text: string } | null>(null);
+
+  const submit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setMsg(null);
+    const ok = await verifyAdminLogin(curUser, curPw);
+    if (!ok) return setMsg({ kind: 'err', text: 'Tên đăng nhập hoặc mật khẩu hiện tại sai.' });
+    if (!newUser.trim()) return setMsg({ kind: 'err', text: 'Tên đăng nhập mới không được trống.' });
+    if (newPw1 && newPw1.length < 4) return setMsg({ kind: 'err', text: 'Mật khẩu mới ≥ 4 ký tự.' });
+    if (newPw1 && newPw1 !== newPw2) return setMsg({ kind: 'err', text: 'Xác nhận mật khẩu không khớp.' });
+    await setAdminCredentials(newUser.trim(), newPw1);
+    setCurUser(''); setCurPw(''); setNewUser(''); setNewPw1(''); setNewPw2('');
+    setMsg({ kind: 'ok', text: 'Đã cập nhật thông tin đăng nhập.' });
+    setTimeout(() => setMsg(null), 3000);
+  };
+
+  return (
+    <>
+      <SectionTitle hint="Đổi tên đăng nhập và mật khẩu cho trang /admin. Mặc định: admin / 123312.">
+        Bảo Mật
+      </SectionTitle>
       <Card>
-        <form onSubmit={submit} className="flex flex-col gap-2">
-          <Field label={hasPw ? 'Mật khẩu hiện tại' : 'Mật khẩu hiện tại (mặc định "admin")'}>
-            <TextInput type="password" value={cur} onChange={(e) => setCur(e.target.value)} />
-          </Field>
-          <Field label="Mật khẩu mới">
-            <TextInput type="password" value={pw1} onChange={(e) => setPw1(e.target.value)} />
-          </Field>
-          <Field label="Xác nhận mật khẩu mới">
-            <TextInput type="password" value={pw2} onChange={(e) => setPw2(e.target.value)} />
-          </Field>
+        <div className="font-ui mb-3" style={{ fontSize: 12, color: B.inkMuted }}>
+          Xác thực thông tin hiện tại trước khi đổi.
+        </div>
+        <form onSubmit={submit} className="flex flex-col gap-3">
+          <div className="rounded-lg p-3 flex flex-col gap-2" style={{ background: B.canvas }}>
+            <div className="font-ui" style={{ fontSize: 11, fontWeight: 700, color: B.inkMuted, letterSpacing: '0.04em' }}>HIỆN TẠI</div>
+            <Field label="Tên đăng nhập hiện tại">
+              <TextInput value={curUser} onChange={e => setCurUser(e.target.value)} placeholder="admin" autoCapitalize="none" />
+            </Field>
+            <Field label="Mật khẩu hiện tại">
+              <TextInput type="password" value={curPw} onChange={e => setCurPw(e.target.value)} placeholder="123312" />
+            </Field>
+          </div>
+          <div className="rounded-lg p-3 flex flex-col gap-2" style={{ background: B.canvas }}>
+            <div className="font-ui" style={{ fontSize: 11, fontWeight: 700, color: B.inkMuted, letterSpacing: '0.04em' }}>MỚI</div>
+            <Field label="Tên đăng nhập mới">
+              <TextInput value={newUser} onChange={e => setNewUser(e.target.value)} placeholder="Tên đăng nhập mới..." autoCapitalize="none" />
+            </Field>
+            <Field label="Mật khẩu mới (≥ 4 ký tự)">
+              <TextInput type="password" value={newPw1} onChange={e => setNewPw1(e.target.value)} placeholder="Mật khẩu mới..." />
+            </Field>
+            {newPw1 && (
+              <Field label="Xác nhận mật khẩu mới">
+                <TextInput type="password" value={newPw2} onChange={e => setNewPw2(e.target.value)} />
+              </Field>
+            )}
+          </div>
           {msg && (
             <div className="font-ui" style={{ fontSize: 12, color: msg.kind === 'ok' ? '#16a34a' : B.orange }}>
               {msg.text}
             </div>
           )}
-          <button type="submit" className="h-9 px-3 rounded font-ui self-start"
-            style={{ background: B.ink, color: B.canvasPure, fontSize: 13, fontWeight: 700 }}>
-            Đổi mật khẩu admin
+          <button type="submit" disabled={!curUser || !curPw || !newUser}
+            className="h-10 px-4 rounded-full font-ui self-start inline-flex items-center gap-1.5"
+            style={{ background: B.ink, color: B.canvasPure, fontSize: 13, fontWeight: 700, opacity: (!curUser||!curPw||!newUser)?0.5:1 }}>
+            <Save size={14} /> Cập nhật đăng nhập
           </button>
         </form>
       </Card>

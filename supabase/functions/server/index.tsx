@@ -240,6 +240,136 @@ app.post("/make-server-ae2dcaa6/upload", async (c) => {
   }
 });
 
+// ── Visitors ─────────────────────────────────────────────────────────────────
+const VISITORS_KEY = "lao-tao:visitors";
+
+// POST /visitors  — public; register a visitor on onboarding
+app.post("/make-server-ae2dcaa6/visitors", async (c) => {
+  try {
+    const body = await c.req.json();
+    if (!body?.name?.trim()) return c.json({ error: "name is required" }, 400);
+    const visitors: any[] = (await kv.get(VISITORS_KEY)) ?? [];
+    const maxId = visitors.reduce((m: number, v: any) => Math.max(m, v.id ?? 0), 0);
+    const entry = { id: maxId + 1, name: body.name.trim(), joinedAt: new Date().toISOString(), points: 0, lastSeen: new Date().toISOString() };
+    visitors.push(entry);
+    await kv.set(VISITORS_KEY, visitors);
+    return c.json({ visitor: entry }, 201);
+  } catch (err) {
+    return c.json({ error: String(err) }, 500);
+  }
+});
+
+// GET /visitors  — admin; list all visitors
+app.get("/make-server-ae2dcaa6/visitors", async (c) => {
+  try {
+    const authErr = checkAdmin(c);
+    if (authErr) return authErr;
+    const visitors: any[] = (await kv.get(VISITORS_KEY)) ?? [];
+    return c.json({ visitors: visitors.sort((a, b) => (b.points ?? 0) - (a.points ?? 0)) });
+  } catch (err) {
+    return c.json({ error: String(err) }, 500);
+  }
+});
+
+// PATCH /visitors/:id  — public; update points and lastSeen
+app.patch("/make-server-ae2dcaa6/visitors/:id", async (c) => {
+  try {
+    const id = Number(c.req.param("id"));
+    const body = await c.req.json();
+    const visitors: any[] = (await kv.get(VISITORS_KEY)) ?? [];
+    const idx = visitors.findIndex((v: any) => v.id === id);
+    if (idx === -1) return c.json({ error: "Not found" }, 404);
+    if (typeof body.points === "number") visitors[idx].points = body.points;
+    visitors[idx].lastSeen = new Date().toISOString();
+    await kv.set(VISITORS_KEY, visitors);
+    return c.json({ visitor: visitors[idx] });
+  } catch (err) {
+    return c.json({ error: String(err) }, 500);
+  }
+});
+
+// DELETE /visitors/:id  — admin
+app.delete("/make-server-ae2dcaa6/visitors/:id", async (c) => {
+  try {
+    const authErr = checkAdmin(c);
+    if (authErr) return authErr;
+    const id = Number(c.req.param("id"));
+    const visitors: any[] = (await kv.get(VISITORS_KEY)) ?? [];
+    const filtered = visitors.filter((v: any) => v.id !== id);
+    await kv.set(VISITORS_KEY, filtered);
+    return c.json({ ok: true });
+  } catch (err) {
+    return c.json({ error: String(err) }, 500);
+  }
+});
+
+// ── Onboarding Photos ─────────────────────────────────────────────────────────
+const ONBOARDING_PHOTOS_KEY = "lao-tao:onboarding-photos";
+
+// GET /onboarding-photos  — public
+app.get("/make-server-ae2dcaa6/onboarding-photos", async (c) => {
+  try {
+    const photos: any[] = (await kv.get(ONBOARDING_PHOTOS_KEY)) ?? [];
+    return c.json({ photos });
+  } catch (err) {
+    return c.json({ error: String(err) }, 500);
+  }
+});
+
+// POST /onboarding-photos  — admin; upload base64 image
+app.post("/make-server-ae2dcaa6/onboarding-photos", async (c) => {
+  try {
+    const authErr = checkAdmin(c);
+    if (authErr) return authErr;
+
+    const body = await c.req.json();
+    if (!body?.data) return c.json({ error: "data is required" }, 400);
+
+    const supabase = createClient(
+      Deno.env.get("SUPABASE_URL")!,
+      Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!,
+    );
+    await supabase.storage.createBucket(BUCKET, { public: true }).catch(() => {});
+
+    const raw: string = body.data;
+    const b64 = raw.includes(",") ? raw.split(",")[1] : raw;
+    const bytes = Uint8Array.from(atob(b64), (ch) => ch.charCodeAt(0));
+    const contentType = body.contentType ?? "image/jpeg";
+    const ext = contentType.includes("png") ? "png" : "jpg";
+    const name = `onboarding/${Date.now()}.${ext}`;
+
+    const { data: uploaded, error } = await supabase.storage
+      .from(BUCKET)
+      .upload(name, bytes, { contentType, upsert: false });
+    if (error) return c.json({ error: error.message }, 500);
+
+    const { data: urlData } = supabase.storage.from(BUCKET).getPublicUrl(uploaded.path);
+    const photos: any[] = (await kv.get(ONBOARDING_PHOTOS_KEY)) ?? [];
+    const maxId = photos.reduce((m: number, p: any) => Math.max(m, p.id ?? 0), 0);
+    const entry = { id: maxId + 1, url: urlData.publicUrl, uploadedAt: new Date().toISOString() };
+    photos.push(entry);
+    await kv.set(ONBOARDING_PHOTOS_KEY, photos);
+    return c.json({ photo: entry }, 201);
+  } catch (err) {
+    return c.json({ error: String(err) }, 500);
+  }
+});
+
+// DELETE /onboarding-photos/:id  — admin
+app.delete("/make-server-ae2dcaa6/onboarding-photos/:id", async (c) => {
+  try {
+    const authErr = checkAdmin(c);
+    if (authErr) return authErr;
+    const id = Number(c.req.param("id"));
+    const photos: any[] = (await kv.get(ONBOARDING_PHOTOS_KEY)) ?? [];
+    const filtered = photos.filter((p: any) => p.id !== id);
+    await kv.set(ONBOARDING_PHOTOS_KEY, filtered);
+    return c.json({ ok: true });
+  } catch (err) {
+    return c.json({ error: String(err) }, 500);
+  }
+});
+
 // ── Trip ─────────────────────────────────────────────────────────────────────
 
 // GET /trip  — public
