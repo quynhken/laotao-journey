@@ -185,6 +185,24 @@
 .no-scrollbar::-webkit-scrollbar { display: none; }
 .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
 
+/* MapLibre NavigationControl — full radius */
+.maplibregl-ctrl-group {
+  border-radius: 9999px !important;
+  overflow: hidden !important;
+}
+.maplibregl-ctrl-group button {
+  border-radius: 0 !important;
+}
+.maplibregl-ctrl-group button:first-child {
+  border-radius: 9999px 9999px 0 0 !important;
+}
+.maplibregl-ctrl-group button:last-child {
+  border-radius: 0 0 9999px 9999px !important;
+}
+.maplibregl-ctrl-group button:only-child {
+  border-radius: 9999px !important;
+}
+
 .paper-noise {
   background-image:
     radial-gradient(rgba(155,120,40,0.05) 1px, transparent 1px),

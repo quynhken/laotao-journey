@@ -219,7 +219,7 @@ export function MapTab({ flagged, onFlag, onQuiz }: Props) {
         onClick={() => setSelected(null)}
         onLoad={(e) => { mapGLRef.current = e.target; }}
       >
-        <NavigationControl position="top-right" style={{ marginTop: 80, marginRight: 12 }} />
+        <NavigationControl position="top-right" style={{ marginTop: 110, marginRight: 12, borderRadius: 9999 }} />
 
         {/* ── Level 1: Province markers ── */}
         {level === 'provinces' && PROVINCES.map(p => {
