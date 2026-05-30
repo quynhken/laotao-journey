@@ -71,11 +71,14 @@ export function FeedTab() {
         {filtered.map((v) => {
           const cat = cats.find(c => c.id === v.categoryId);
           return (
-            <article key={v.id} style={{
+            <a key={v.id} href={v.url} target="_blank" rel="noopener noreferrer" style={{
+              display: 'block',
               background: 'var(--bg-base)',
               border: '1px solid var(--border-subtle)',
               borderRadius: 'var(--radius-lg)',
               overflow: 'hidden',
+              textDecoration: 'none',
+              color: 'inherit',
             }}>
               <div className="relative aspect-video">
                 <ImageWithFallback src={v.image} alt={v.title} className="w-full h-full object-cover" />
@@ -101,13 +104,12 @@ export function FeedTab() {
                   {v.place} · {v.date}
                 </div>
                 <h3 className="font-display" style={{ fontSize: 16, fontWeight: 700, lineHeight: 1.25 }}>{v.title}</h3>
-                <a href={v.url} target="_blank" rel="noopener noreferrer"
-                  className="mt-3 inline-flex items-center gap-1.5 px-4 h-9 rounded-full font-ui"
+                <div className="mt-3 inline-flex items-center gap-1.5 px-4 h-9 rounded-full font-ui"
                   style={{ background: '#FF0000', color: '#fff', fontSize: 12, fontWeight: 700 }}>
                   <Play size={11} fill="#fff" strokeWidth={0} /> Xem Video
-                </a>
+                </div>
               </div>
-            </article>
+            </a>
           );
         })}
       </div>

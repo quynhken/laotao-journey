@@ -160,10 +160,17 @@ export function MapTab({ flagged, onFlag, onQuiz }: Props) {
     setSelected(null);
     setFilterChip(0);
     const subs = SUB_LOCATIONS.filter(s => s.provinceId === p.id);
-    // Fly to the highest-locNum sublocation (furthest point), fallback to province center
-    const topSub = subs.length > 0 ? subs.reduce((a, b) => b.locNum > a.locNum ? b : a) : null;
-    const center: [number, number] = topSub ? [topSub.lng, topSub.lat] : [p.lng, p.lat];
-    mapGLRef.current?.flyTo({ center, zoom: 12, duration: 700 });
+    if (subs.length > 1) {
+      // Fit bounding box of all sublocations so all are visible
+      const lngs = subs.map(s => s.lng);
+      const lats = subs.map(s => s.lat);
+      const sw: [number, number] = [Math.min(...lngs), Math.min(...lats)];
+      const ne: [number, number] = [Math.max(...lngs), Math.max(...lats)];
+      mapGLRef.current?.fitBounds([sw, ne], { padding: 80, duration: 700, maxZoom: 11 });
+    } else {
+      const center: [number, number] = subs[0] ? [subs[0].lng, subs[0].lat] : [p.lng, p.lat];
+      mapGLRef.current?.flyTo({ center, zoom: 11, duration: 700 });
+    }
     setTimeout(() => applySubLines(subs), 100);
   }, [applySubLines, SUB_LOCATIONS]);
 
