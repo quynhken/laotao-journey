@@ -4,14 +4,24 @@ import {
 } from 'lucide-react';
 import { STOPS, BADGES, REGION_COLOR, REGION_LABEL, type Region } from './data';
 import { useSettings } from '../store';
+import type { Province } from './data';
 
 const BADGE_ICON_MAP: Record<string, LucideIcon> = {
   Compass, Film, Flag, Sparkles, BookOpen, Star, Layers, PenLine,
 };
 
 export function FlexBookTab({ flagged, points }: { flagged: Set<number>; points: number }) {
-  useSettings();
+  const settings = useSettings();
+  const provinces: Province[] = settings.provinces ?? [];
+  const subLocations = settings.subLocations ?? [];
+
   const totalFlagged = STOPS.filter((s) => s.status === 'flagged' || flagged.has(s.id)).length;
+
+  // Get the earliest date from a province's sublocations
+  const provinceDate = (pid: number): string => {
+    const subs = subLocations.filter(s => s.provinceId === pid && s.date && s.date !== '—').sort((a, b) => a.locNum - b.locNum);
+    return subs[0]?.date ?? '';
+  };
   const earnedBadges = BADGES.filter((b) => b.earned).length;
 
   return (
@@ -48,12 +58,22 @@ export function FlexBookTab({ flagged, points }: { flagged: Set<number>; points:
       {/* Stamp Grid */}
       <section>
         <div className="font-ui mb-2" style={{ fontSize: 11, letterSpacing: '0.06em', color: 'var(--text-secondary)' }}>
-          TRANG CẮM CỜ ({totalFlagged}/{STOPS.length})
+          TRANG CẮM CỜ ({provinces.filter(p => p.status !== 'locked').length}/{provinces.length})
         </div>
         <div className="grid grid-cols-4 gap-3">
-          {STOPS.map((s) => {
-            const earned = s.status === 'flagged' || flagged.has(s.id);
-            return <Stamp key={s.id} id={s.id} name={s.name} date={s.date} region={s.region} earned={earned} />;
+          {[...provinces].sort((a, b) => a.id - b.id).map((p, idx) => {
+            const visited = p.status === 'visited' || p.status === 'flagged';
+            return (
+              <Stamp
+                key={p.id}
+                num={idx + 1}
+                name={p.name}
+                date={provinceDate(p.id)}
+                region={p.region}
+                visited={visited}
+                locked={p.status === 'locked'}
+              />
+            );
           })}
         </div>
       </section>
@@ -82,32 +102,31 @@ function Stat({ label, value, accent, divider, icon }: {
   );
 }
 
-function Stamp({ id, name, date, region, earned }: {
-  id: number; name: string; date: string; region: Region; earned: boolean;
+function Stamp({ num, name, date, region, visited, locked }: {
+  num: number; name: string; date: string; region: Region; visited: boolean; locked: boolean;
 }) {
   const color = REGION_COLOR[region];
-  const label = REGION_LABEL[region];
   return (
     <div
       className="relative aspect-square grid place-items-center text-center p-1"
       style={{
-        border: `2px dashed ${earned ? color : 'var(--border-default)'}`,
+        border: `2px dashed ${visited ? color : 'var(--border-default)'}`,
         borderRadius: '50%',
-        background: earned ? `${color}14` : 'transparent',
-        opacity: earned ? 1 : 0.35,
-        filter: earned ? 'none' : 'grayscale(1)',
-        animation: earned ? 'stampIn 500ms var(--ease-spring) both' : 'none',
+        background: visited ? `${color}14` : 'transparent',
+        opacity: locked ? 0.3 : 1,
+        filter: locked ? 'grayscale(1)' : 'none',
+        animation: visited ? 'stampIn 500ms var(--ease-spring) both' : 'none',
       }}
     >
       <div>
-        <div className="font-ui" style={{ fontSize: 9, color: earned ? color : 'var(--text-muted)', fontWeight: 700 }}>
-          #{String(id).padStart(2, '0')}
+        <div className="font-ui" style={{ fontSize: 9, color: visited ? color : 'var(--text-tertiary)', fontWeight: 700 }}>
+          #{String(num).padStart(2, '0')}
         </div>
-        <div className="font-display" style={{ fontSize: 10, lineHeight: 1.1, color: earned ? color : 'var(--text-muted)', fontWeight: 700 }}>
+        <div className="font-display" style={{ fontSize: 10, lineHeight: 1.1, color: visited ? color : 'var(--text-tertiary)', fontWeight: 700 }}>
           {name}
         </div>
-        <div className="font-ui" style={{ fontSize: 8, color: earned ? color : 'var(--text-muted)', opacity: 0.7 }}>
-          {earned ? date : label}
+        <div className="font-ui" style={{ fontSize: 8, color: visited ? color : 'var(--text-tertiary)', opacity: 0.7 }}>
+          {visited ? date : 'Chưa đến'}
         </div>
       </div>
     </div>
