@@ -649,6 +649,44 @@ app.delete("/make-server-ae2dcaa6/categories/:id", async (c) => {
   }
 });
 
+// ── Reviews per sublocation ───────────────────────────────────────────────────
+const REVIEWS_KEY = "lao-tao:sub-reviews";
+
+// GET /sub-reviews/:id  — public; get all reviews for a sublocation
+app.get("/make-server-ae2dcaa6/sub-reviews/:id", async (c: any) => {
+  try {
+    const id = String(c.req.param("id"));
+    const all: Record<string, any[]> = (await kv.get(REVIEWS_KEY)) ?? {};
+    return c.json({ reviews: (all[id] ?? []).slice().reverse() });
+  } catch (err) {
+    return c.json({ error: String(err) }, 500);
+  }
+});
+
+// POST /sub-reviews/:id  — public; submit a review
+app.post("/make-server-ae2dcaa6/sub-reviews/:id", async (c: any) => {
+  try {
+    const id = String(c.req.param("id"));
+    const body = await c.req.json();
+    if (!body?.name?.trim()) return c.json({ error: "name required" }, 400);
+    const all: Record<string, any[]> = (await kv.get(REVIEWS_KEY)) ?? {};
+    if (!all[id]) all[id] = [];
+    const entry = {
+      id: Date.now(),
+      name: String(body.name).trim().slice(0, 40),
+      stars: Math.min(5, Math.max(1, Number(body.stars) || 5)),
+      text: String(body.text || '').slice(0, 150),
+      chips: Array.isArray(body.chips) ? body.chips.slice(0, 6) : [],
+      createdAt: new Date().toISOString(),
+    };
+    all[id].push(entry);
+    await kv.set(REVIEWS_KEY, all);
+    return c.json({ review: entry }, 201);
+  } catch (err) {
+    return c.json({ error: String(err) }, 500);
+  }
+});
+
 // ── Reactions (like / dislike / share per sublocation) ───────────────────────
 const REACTIONS_KEY = "lao-tao:reactions";
 

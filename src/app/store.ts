@@ -578,9 +578,13 @@ export async function patchTrip(updates: Partial<AppSettings['trip']>): Promise<
 // ── Visitors ─────────────────────────────────────────────────────────────────
 
 const VISITOR_ID_KEY = 'lao-tao:visitorId';
+const VISITOR_NAME_KEY = 'lao-tao:visitorName';
 
 export function getVisitorId(): number | null {
   try { const v = localStorage.getItem(VISITOR_ID_KEY); return v ? Number(v) : null; } catch { return null; }
+}
+export function getVisitorName(): string {
+  try { return localStorage.getItem(VISITOR_NAME_KEY) ?? 'Ẩn danh'; } catch { return 'Ẩn danh'; }
 }
 
 function collectBrowserInfo() {
@@ -621,6 +625,7 @@ export async function registerVisitor(name: string): Promise<void> {
     if (res.ok) {
       const { visitor } = await res.json();
       if (visitor?.id) localStorage.setItem(VISITOR_ID_KEY, String(visitor.id));
+      localStorage.setItem(VISITOR_NAME_KEY, name);
     }
   } catch { /* fire & forget */ }
 }
@@ -709,5 +714,36 @@ export async function recordReaction(subId: number, type: ReactionType): Promise
     if (!res.ok) return null;
     const data = await res.json();
     return { like: data.like ?? 0, dislike: data.dislike ?? 0, share: data.share ?? 0 };
+  } catch { return null; }
+}
+
+// ── Sub Reviews ───────────────────────────────────────────────────────────────
+
+export type SubReview = {
+  id: number;
+  name: string;
+  stars: number;
+  text: string;
+  chips: string[];
+  createdAt: string;
+};
+
+export async function fetchSubReviews(subId: number): Promise<SubReview[]> {
+  try {
+    const res = await fetch(`${API_BASE}/sub-reviews/${subId}`, { headers: { Authorization: `Bearer ${publicAnonKey}` } });
+    if (!res.ok) return [];
+    return (await res.json()).reviews ?? [];
+  } catch { return []; }
+}
+
+export async function submitSubReview(subId: number, review: { name: string; stars: number; text: string; chips: string[] }): Promise<SubReview | null> {
+  try {
+    const res = await fetch(`${API_BASE}/sub-reviews/${subId}`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${publicAnonKey}` },
+      body: JSON.stringify(review),
+    });
+    if (!res.ok) return null;
+    return (await res.json()).review ?? null;
   } catch { return null; }
 }

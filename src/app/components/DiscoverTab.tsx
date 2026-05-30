@@ -1,8 +1,8 @@
-import { useState, useMemo, useEffect } from 'react';
+import { useState, useMemo, useEffect, useCallback } from 'react';
 import { motion, useMotionValue, useTransform, AnimatePresence } from 'motion/react';
-import { Navigation, Heart, X, Share2, ThumbsDown } from 'lucide-react';
+import { Navigation, Heart, X, Share2, ThumbsDown, MapPin, Star } from 'lucide-react';
 import { ImageWithFallback } from './figma/ImageWithFallback';
-import { useSettings, setSettings, patchSubLocation, fetchReactions, recordReaction, type ReactionCounts } from '../store';
+import { useSettings, setSettings, patchSubLocation, fetchReactions, recordReaction, type ReactionCounts, fetchSubReviews, submitSubReview, type SubReview, getVisitorName } from '../store';
 import type { SubLocation } from './data';
 
 type Action = 'flag' | 'skip' | 'wishlist';
@@ -39,17 +39,22 @@ export function DiscoverTab({
 
   const [stack, setStack] = useState<SubLocation[]>(allSubs);
   const [reviewing, setReviewing] = useState<SubLocation | null>(null);
+  const [reviewInitStars, setReviewInitStars] = useState(0);
+  const [detail, setDetail] = useState<SubLocation | null>(null);
   const [reactions, setReactions] = useState<Record<string, ReactionCounts>>({});
 
-  useEffect(() => {
-    fetchReactions().then(setReactions);
-  }, []);
+  useEffect(() => { fetchReactions().then(setReactions); }, []);
 
   const topReactions = (id: number): ReactionCounts => reactions[String(id)] ?? { like: 0, dislike: 0, share: 0 };
 
   const react = async (id: number, type: 'like' | 'dislike' | 'share') => {
     const updated = await recordReaction(id, type);
     if (updated) setReactions(prev => ({ ...prev, [String(id)]: updated }));
+  };
+
+  const openReview = (sub: SubLocation, initStars = 0) => {
+    setReviewInitStars(initStars);
+    setReviewing(sub);
   };
 
   const handleDone = (action: Action) => {
@@ -112,6 +117,7 @@ export function DiscoverTab({
                 depth={depth}
                 interactive={depth === 0}
                 onDone={handleDone}
+                onTap={() => depth === 0 && setDetail(sub)}
               />
             );
           })}
@@ -153,8 +159,8 @@ export function DiscoverTab({
           </span>
         </button>
 
-        {/* Thích */}
-        <button onClick={() => { if (top) { react(top.id, 'like'); handleDone('flag'); } }}
+        {/* Thích → mở review với 5 sao mặc định */}
+        <button onClick={() => { if (top) { react(top.id, 'like'); openReview(top, 5); } }}
           className="flex flex-col items-center gap-1.5 active:scale-95 transition">
           <div className="grid place-items-center rounded-full"
             style={{ width: 56, height: 56, border: 'none', background: 'var(--accent-500)', color: '#fff', boxShadow: '0 4px 14px rgba(255,99,31,0.35)' }}>
@@ -169,8 +175,10 @@ export function DiscoverTab({
       {reviewing && (
         <ReviewSheet
           sub={reviewing}
+          initStars={reviewInitStars}
           onClose={() => setReviewing(null)}
-          onSubmit={(stars, text) => {
+          onSubmit={(stars, text, chips) => {
+            const name = getVisitorName();
             if (stars > 0) {
               patchSubLocation(reviewing.id, { rating: stars });
               setSettings((prev) => ({
@@ -180,9 +188,17 @@ export function DiscoverTab({
                 ),
               }));
             }
+            submitSubReview(reviewing.id, { name, stars, text, chips });
             onAddPoints(20, 'Review');
             setReviewing(null);
           }}
+        />
+      )}
+      {detail && (
+        <DetailSheet
+          sub={detail}
+          onClose={() => setDetail(null)}
+          onReview={() => { openReview(detail, 0); setDetail(null); }}
         />
       )}
     </div>
@@ -190,9 +206,9 @@ export function DiscoverTab({
 }
 
 function SwipeCard({
-  sub, depth, interactive, onDone,
+  sub, depth, interactive, onDone, onTap,
 }: {
-  sub: SubLocation; depth: number; interactive: boolean; onDone: (a: Action) => void;
+  sub: SubLocation; depth: number; interactive: boolean; onDone: (a: Action) => void; onTap?: () => void;
 }) {
   const x = useMotionValue(0);
   const y = useMotionValue(0);
@@ -226,6 +242,7 @@ function SwipeCard({
         if (info.offset.x > t) onDone('flag');
         else if (info.offset.x < -t) onDone('skip');
         else if (info.offset.y < -t) onDone('wishlist');
+        else if (Math.abs(info.offset.x) < 10 && Math.abs(info.offset.y) < 10) onTap?.();
       }}
       initial={{ opacity: 0, scale: 0.95 }}
       animate={{
@@ -286,13 +303,14 @@ function SwipeCard({
 }
 
 function ReviewSheet({
-  sub, onClose, onSubmit,
+  sub, initStars = 0, onClose, onSubmit,
 }: {
   sub: SubLocation;
+  initStars?: number;
   onClose: () => void;
-  onSubmit: (stars: number, text: string) => void;
+  onSubmit: (stars: number, text: string, chips: string[]) => void;
 }) {
-  const [stars, setStars] = useState(0);
+  const [stars, setStars] = useState(initStars);
   const [text, setText] = useState('');
   const chips = ['Đẹp vãi', 'Đồ ăn ngon', 'Đường khó đi', 'Nhất định quay lại', 'Lạnh lắm', 'Đông khách'];
   const [sel, setSel] = useState<Set<string>>(new Set());
@@ -355,7 +373,7 @@ function ReviewSheet({
         </div>
 
         <div className="flex gap-2 pt-2">
-          <button onClick={() => onSubmit(stars, text)} className="flex-1 h-11 rounded-full font-ui"
+          <button onClick={() => onSubmit(stars, text, Array.from(sel))} className="flex-1 h-11 rounded-full font-ui"
             style={{ background: 'var(--accent-500)', color: '#fff', fontWeight: 700 }}>
             Đăng Review +20đ
           </button>
@@ -363,6 +381,118 @@ function ReviewSheet({
             style={{ background: 'transparent', color: 'var(--text-secondary)' }}>
             Bỏ qua
           </button>
+        </div>
+      </motion.div>
+    </div>
+  );
+}
+
+function DetailSheet({ sub, onClose, onReview }: {
+  sub: SubLocation; onClose: () => void; onReview: () => void;
+}) {
+  const [reviews, setReviews] = useState<SubReview[]>([]);
+  const [loading, setLoading] = useState(true);
+  const img = (sub.images?.[0] || sub.image) ?? '';
+
+  useEffect(() => {
+    fetchSubReviews(sub.id).then(r => { setReviews(r); setLoading(false); });
+  }, [sub.id]);
+
+  const fmtDate = (iso: string) => {
+    try { const d = new Date(iso); return `${d.getDate()}/${d.getMonth()+1}/${d.getFullYear()}`; } catch { return ''; }
+  };
+
+  return (
+    <div className="fixed inset-0 z-40 flex items-end" onClick={onClose}
+      style={{ background: 'rgba(17,17,17,0.5)', backdropFilter: 'blur(4px)' }}>
+      <motion.div
+        initial={{ y: '100%' }} animate={{ y: 0 }} exit={{ y: '100%' }}
+        transition={{ duration: 0.28, ease: [0, 0, 0.2, 1] }}
+        onClick={e => e.stopPropagation()}
+        className="w-full max-w-[480px] mx-auto overflow-y-auto no-scrollbar"
+        style={{ background: 'var(--bg-base)', borderRadius: 'var(--radius-xl) var(--radius-xl) 0 0', maxHeight: '88dvh' }}
+      >
+        {/* Handle */}
+        <div className="sticky top-0 z-10 pt-3 pb-2 px-5" style={{ background: 'var(--bg-base)' }}>
+          <div className="w-9 h-1 rounded-full mx-auto mb-3" style={{ background: 'var(--border-default)' }} />
+        </div>
+
+        {/* Image */}
+        {img && (
+          <div className="relative mx-4 rounded-2xl overflow-hidden" style={{ aspectRatio: '16/9' }}>
+            <ImageWithFallback src={img} alt={sub.name} className="w-full h-full object-cover" />
+          </div>
+        )}
+
+        {/* Info */}
+        <div className="px-5 pt-4 pb-2">
+          <div className="flex items-center gap-1.5 mb-1">
+            <MapPin size={11} strokeWidth={2} style={{ color: 'var(--text-tertiary)' }} />
+            <span className="font-ui" style={{ fontSize: 11, color: 'var(--text-tertiary)' }}>
+              {sub.province}{sub.km > 0 ? ` · km ${sub.km}` : ''}{sub.date !== '—' ? ` · ${sub.date}` : ''}
+            </span>
+          </div>
+          <h2 className="font-display" style={{ fontSize: 22, fontWeight: 800, lineHeight: 1.15 }}>{sub.name}</h2>
+          {sub.rating && sub.rating > 0 && (
+            <div className="flex items-center gap-1 mt-1">
+              {[1,2,3,4,5].map(n => (
+                <Star key={n} size={13} strokeWidth={0} fill={n <= Math.round(sub.rating!) ? 'var(--accent-500)' : 'var(--border-default)'} />
+              ))}
+              <span className="font-ui ml-1" style={{ fontSize: 12, color: 'var(--text-secondary)' }}>{sub.rating.toFixed(1)}</span>
+            </div>
+          )}
+          {sub.quote && sub.quote !== '"..."' && (
+            <p className="font-body italic mt-3" style={{ fontSize: 14, color: 'var(--text-secondary)', lineHeight: 1.5 }}>
+              {sub.quote}
+            </p>
+          )}
+        </div>
+
+        {/* Review button */}
+        <div className="px-5 pb-4">
+          <button onClick={onReview}
+            className="w-full h-11 rounded-full font-ui mt-2"
+            style={{ background: 'var(--accent-500)', color: '#fff', fontWeight: 700, fontSize: 14 }}>
+            ✍️ Viết đánh giá +20đ
+          </button>
+        </div>
+
+        {/* Reviews list */}
+        <div className="px-5 pb-6">
+          <div className="font-ui mb-3" style={{ fontSize: 12, fontWeight: 700, color: 'var(--text-secondary)', letterSpacing: '0.05em' }}>
+            ĐÁNH GIÁ ({reviews.length})
+          </div>
+          {loading ? (
+            <div className="font-ui text-center py-4" style={{ fontSize: 13, color: 'var(--text-tertiary)' }}>Đang tải...</div>
+          ) : reviews.length === 0 ? (
+            <div className="font-ui text-center py-4" style={{ fontSize: 13, color: 'var(--text-tertiary)' }}>
+              Chưa có đánh giá. Là người đầu tiên nhé!
+            </div>
+          ) : (
+            <div className="flex flex-col gap-3">
+              {reviews.map(r => (
+                <div key={r.id} className="p-3 rounded-xl" style={{ background: 'var(--bg-surface)', border: '1px solid var(--border-subtle)' }}>
+                  <div className="flex items-center justify-between mb-1">
+                    <span className="font-ui" style={{ fontSize: 13, fontWeight: 700 }}>{r.name}</span>
+                    <div className="flex items-center gap-0.5">
+                      {[1,2,3,4,5].map(n => (
+                        <Star key={n} size={11} strokeWidth={0} fill={n <= r.stars ? 'var(--accent-500)' : 'var(--border-default)'} />
+                      ))}
+                    </div>
+                  </div>
+                  {r.chips?.length > 0 && (
+                    <div className="flex flex-wrap gap-1 mb-1.5">
+                      {r.chips.map(c => (
+                        <span key={c} className="font-ui px-2 py-0.5 rounded-full" style={{ fontSize: 10, background: 'var(--accent-100)', color: 'var(--accent-600)' }}>{c}</span>
+                      ))}
+                    </div>
+                  )}
+                  {r.text && <p className="font-ui" style={{ fontSize: 13, color: 'var(--text-secondary)', lineHeight: 1.4 }}>{r.text}</p>}
+                  <div className="font-ui mt-1.5" style={{ fontSize: 10, color: 'var(--text-tertiary)' }}>{fmtDate(r.createdAt)}</div>
+                </div>
+              ))}
+            </div>
+          )}
         </div>
       </motion.div>
     </div>
