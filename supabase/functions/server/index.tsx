@@ -150,7 +150,7 @@ app.patch("/make-server-ae2dcaa6/sublocations/:id", async (c) => {
     if (!settings) return c.json({ error: "Settings not found" }, 404);
     const idx = (settings.subLocations ?? []).findIndex((s: any) => s.id === id);
     if (idx === -1) return c.json({ error: "SubLocation not found" }, 404);
-    const allowed = ["status", "image", "images", "name", "km", "date", "quote", "locNum", "lat", "lng", "rating", "reviews"];
+    const allowed = ["status", "image", "images", "name", "km", "date", "quote", "locNum", "lat", "lng", "rating", "reviews", "episode"];
     const patch: Record<string, any> = {};
     for (const key of allowed) {
       if (key in body) patch[key] = body[key];
@@ -250,7 +250,20 @@ app.post("/make-server-ae2dcaa6/visitors", async (c) => {
     if (!body?.name?.trim()) return c.json({ error: "name is required" }, 400);
     const visitors: any[] = (await kv.get(VISITORS_KEY)) ?? [];
     const maxId = visitors.reduce((m: number, v: any) => Math.max(m, v.id ?? 0), 0);
-    const entry = { id: maxId + 1, name: body.name.trim(), joinedAt: new Date().toISOString(), points: 0, lastSeen: new Date().toISOString() };
+    const entry = {
+      id: maxId + 1,
+      name: body.name.trim(),
+      joinedAt: new Date().toISOString(),
+      points: 0,
+      lastSeen: new Date().toISOString(),
+      device: body.device ?? '',
+      os: body.os ?? '',
+      browser: body.browser ?? '',
+      language: body.language ?? '',
+      timezone: body.timezone ?? '',
+      screen: body.screen ?? '',
+      referrer: body.referrer ?? '',
+    };
     visitors.push(entry);
     await kv.set(VISITORS_KEY, visitors);
     return c.json({ visitor: entry }, 201);

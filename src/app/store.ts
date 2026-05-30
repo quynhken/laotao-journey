@@ -32,6 +32,13 @@ export type Visitor = {
   joinedAt: string;
   points: number;
   lastSeen: string;
+  device?: string;       // mobile | tablet | desktop
+  os?: string;           // iOS | Android | Windows | macOS | Linux | ...
+  browser?: string;      // Chrome | Safari | Firefox | Edge | ...
+  language?: string;     // vi | en | ...
+  timezone?: string;     // Asia/Ho_Chi_Minh | ...
+  screen?: string;       // 390x844
+  referrer?: string;
 };
 
 export type VideoCategory = {
@@ -576,12 +583,40 @@ export function getVisitorId(): number | null {
   try { const v = localStorage.getItem(VISITOR_ID_KEY); return v ? Number(v) : null; } catch { return null; }
 }
 
+function collectBrowserInfo() {
+  const ua = navigator.userAgent;
+  const isMobile = /Mobi|Android|iPhone|iPad|iPod/i.test(ua);
+  const isTablet = /iPad|Android(?!.*Mobile)/i.test(ua);
+  const device = isTablet ? 'tablet' : isMobile ? 'mobile' : 'desktop';
+  const os =
+    /iPhone|iPad|iPod/.test(ua) ? 'iOS' :
+    /Android/.test(ua) ? 'Android' :
+    /Windows/.test(ua) ? 'Windows' :
+    /Mac OS X/.test(ua) ? 'macOS' :
+    /Linux/.test(ua) ? 'Linux' : 'Unknown';
+  const browser =
+    /Edg\//.test(ua) ? 'Edge' :
+    /OPR\/|Opera/.test(ua) ? 'Opera' :
+    /CriOS\//.test(ua) ? 'Chrome iOS' :
+    /FxiOS\//.test(ua) ? 'Firefox iOS' :
+    /Chrome\//.test(ua) ? 'Chrome' :
+    /Firefox\//.test(ua) ? 'Firefox' :
+    /Safari\//.test(ua) ? 'Safari' : 'Other';
+  return {
+    device, os, browser,
+    language: navigator.language?.split('-')[0] ?? '',
+    timezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
+    screen: `${window.screen.width}x${window.screen.height}`,
+    referrer: document.referrer || '',
+  };
+}
+
 export async function registerVisitor(name: string): Promise<void> {
   try {
     const res = await fetch(`${API_BASE}/visitors`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${publicAnonKey}` },
-      body: JSON.stringify({ name }),
+      body: JSON.stringify({ name, ...collectBrowserInfo() }),
     });
     if (res.ok) {
       const { visitor } = await res.json();

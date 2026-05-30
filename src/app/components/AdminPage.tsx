@@ -2044,25 +2044,76 @@ function VisitorsSection() {
           Chưa có người dùng nào. Họ sẽ xuất hiện khi ai đó nhập tên và vào trang.
         </div>
       ) : (
-        <div className="rounded-lg overflow-hidden" style={{ border: `1px solid ${B.hairline}` }}>
-          <div className="grid px-4 py-2 font-ui"
-            style={{ gridTemplateColumns: '28px 1fr 80px 140px 32px', background: B.canvas, fontSize: 11, fontWeight: 700, color: B.inkMuted }}>
-            <div>#</div><div>Tên</div><div>Điểm</div><div>Hoạt động lần cuối</div><div></div>
-          </div>
+        <div className="flex flex-col gap-2">
           {filtered.map((v, i) => (
-            <div key={v.id} className="grid px-4 py-2.5 items-center"
-              style={{ gridTemplateColumns: '28px 1fr 80px 140px 32px', borderTop: `1px solid ${B.hairline}` }}>
-              <span className="font-ui" style={{ fontSize: 11, color: B.inkSubtle }}>{i + 1}</span>
-              <span className="font-ui" style={{ fontSize: 14, fontWeight: 600, color: B.ink }}>{v.name}</span>
-              <span className="font-ui" style={{ fontSize: 13, fontWeight: 700, color: (v.points ?? 0) > 0 ? B.orange : B.inkSubtle }}>
-                {(v.points ?? 0) > 0 ? `${(v.points).toLocaleString()}đ` : '—'}
-              </span>
-              <span className="font-ui" style={{ fontSize: 11, color: B.inkMuted }}>{fmt(v.lastSeen ?? v.joinedAt)}</span>
-              <button onClick={() => remove(v.id)}
-                className="h-7 w-7 rounded grid place-items-center"
-                style={{ background: B.canvas, border: `1px solid ${B.hairline}` }}>
-                <Trash2 size={11} style={{ color: B.inkMuted }} />
-              </button>
+            <div key={v.id} className="rounded-xl p-4" style={{ background: B.canvasPure, border: `1px solid ${B.hairline}` }}>
+              {/* Header row */}
+              <div className="flex items-start justify-between gap-2 mb-2">
+                <div className="flex items-center gap-2">
+                  <span className="font-ui" style={{ fontSize: 11, color: B.inkSubtle, minWidth: 20 }}>{i + 1}.</span>
+                  <span className="font-display" style={{ fontSize: 16, fontWeight: 700, color: B.ink }}>{v.name}</span>
+                  {(v.points ?? 0) > 0 && (
+                    <span className="px-2 py-0.5 rounded-full font-ui" style={{ fontSize: 11, fontWeight: 700, background: '#FFF3ED', color: B.orange }}>
+                      {v.points.toLocaleString()}đ
+                    </span>
+                  )}
+                </div>
+                <button onClick={() => remove(v.id)} className="h-7 w-7 rounded-full grid place-items-center shrink-0"
+                  style={{ background: B.canvas, border: `1px solid ${B.hairline}` }}>
+                  <Trash2 size={11} style={{ color: B.inkMuted }} />
+                </button>
+              </div>
+
+              {/* Info chips */}
+              <div className="flex flex-wrap gap-1.5">
+                {v.device && (
+                  <span className="px-2 py-0.5 rounded-full font-ui" style={{ fontSize: 10, background: B.canvas, color: B.inkMuted, border: `1px solid ${B.hairline}` }}>
+                    {v.device === 'mobile' ? '📱' : v.device === 'tablet' ? '📲' : '🖥'} {v.device}
+                  </span>
+                )}
+                {v.os && (
+                  <span className="px-2 py-0.5 rounded-full font-ui" style={{ fontSize: 10, background: B.canvas, color: B.inkMuted, border: `1px solid ${B.hairline}` }}>
+                    {v.os}
+                  </span>
+                )}
+                {v.browser && (
+                  <span className="px-2 py-0.5 rounded-full font-ui" style={{ fontSize: 10, background: B.canvas, color: B.inkMuted, border: `1px solid ${B.hairline}` }}>
+                    {v.browser}
+                  </span>
+                )}
+                {v.language && (
+                  <span className="px-2 py-0.5 rounded-full font-ui" style={{ fontSize: 10, background: B.canvas, color: B.inkMuted, border: `1px solid ${B.hairline}` }}>
+                    🌐 {v.language.toUpperCase()}
+                  </span>
+                )}
+                {v.timezone && (
+                  <span className="px-2 py-0.5 rounded-full font-ui" style={{ fontSize: 10, background: B.canvas, color: B.inkMuted, border: `1px solid ${B.hairline}` }}>
+                    🕐 {v.timezone}
+                  </span>
+                )}
+                {v.screen && (
+                  <span className="px-2 py-0.5 rounded-full font-ui" style={{ fontSize: 10, background: B.canvas, color: B.inkMuted, border: `1px solid ${B.hairline}` }}>
+                    {v.screen}
+                  </span>
+                )}
+                {v.referrer && (
+                  <span className="px-2 py-0.5 rounded-full font-ui" style={{ fontSize: 10, background: B.canvas, color: B.inkMuted, border: `1px solid ${B.hairline}` }}>
+                    🔗 {v.referrer.replace(/^https?:\/\//, '').slice(0, 30)}
+                  </span>
+                )}
+              </div>
+
+              {/* Timestamps */}
+              <div className="flex gap-4 mt-2">
+                <span className="font-ui" style={{ fontSize: 10, color: B.inkSubtle }}>
+                  Tham gia: {fmt(v.joinedAt)}
+                </span>
+                {v.lastSeen && v.lastSeen !== v.joinedAt && (
+                  <span className="font-ui" style={{ fontSize: 10, color: B.inkSubtle }}>
+                    Lần cuối: {fmt(v.lastSeen)}
+                  </span>
+                )}
+              </div>
             </div>
           ))}
         </div>
