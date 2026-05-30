@@ -27,31 +27,74 @@ export function FlexBookTab({ flagged, points }: { flagged: Set<number>; points:
   return (
     <div className="px-4 py-4 space-y-5">
       {/* Passport Cover */}
-      <div
-        className="paper-noise relative overflow-hidden"
-        style={{
-          background: 'linear-gradient(165deg, var(--bg-surface), var(--bg-warm))',
-          border: '1px solid var(--border-default)',
-          borderRadius: 'var(--radius-xl)',
-          padding: 24,
-        }}
-      >
-        <div className="font-ui" style={{ fontSize: 10, letterSpacing: '0.16em', color: 'var(--text-tertiary)' }}>
+      <div className="relative overflow-hidden" style={{
+        background: 'linear-gradient(150deg, #FF7A3C 0%, #FF4F00 55%, #C93A00 100%)',
+        borderRadius: 'var(--radius-xl)',
+        padding: '18px 20px 16px',
+        boxShadow: '0 8px 32px rgba(201,58,0,0.4), inset 0 1px 0 rgba(255,255,255,0.15)',
+      }}>
+        {/* Shimmer sweep */}
+        <div style={{
+          position: 'absolute', top: 0, left: 0, width: '40%', height: '100%',
+          background: 'linear-gradient(90deg, transparent, rgba(255,255,255,0.12), transparent)',
+          animation: 'shimmer 3s ease-in-out infinite',
+          pointerEvents: 'none',
+        }} />
+
+        {/* Corner dots */}
+        {['top-2.5 left-2.5','top-2.5 right-2.5','bottom-2.5 left-2.5','bottom-2.5 right-2.5'].map(pos => (
+          <div key={pos} className={`absolute ${pos} w-1.5 h-1.5 rounded-full`} style={{ background: 'rgba(255,255,255,0.5)' }} />
+        ))}
+
+        {/* Header row */}
+        <div className="font-ui" style={{ fontSize: 8.5, letterSpacing: '0.15em', color: 'rgba(255,255,255,0.65)' }}>
           CỘNG HOÀ XÃ HỘI CHỦ NGHĨA VIỆT NAM
         </div>
-        <div className="flex items-center justify-between mt-2">
-          <h1 className="font-display" style={{ fontSize: 32, fontWeight: 800, letterSpacing: '-0.02em' }}>
-            FLEX BOOK
+        <div className="flex items-center justify-between mt-1.5">
+          <h1 className="font-display" style={{ fontSize: 26, fontWeight: 900, letterSpacing: '0.02em', color: '#fff', textShadow: '0 1px 6px rgba(0,0,0,0.25)' }}>
+            HỘ CHIẾU SỐ
           </h1>
-          <Map size={34} strokeWidth={1.5} style={{ color: 'var(--accent-400)' }} />
+          <div className="flex items-center justify-center" style={{
+            width: 40, height: 40, borderRadius: '50%',
+            border: '1.5px solid rgba(255,255,255,0.5)',
+            background: 'rgba(255,255,255,0.12)',
+            animation: 'starPulse 2.5s ease-in-out infinite',
+          }}>
+            <span style={{ fontSize: 20, color: '#fff' }}>★</span>
+          </div>
         </div>
-        <div className="font-body italic mt-1" style={{ color: 'var(--text-secondary)', fontSize: 14 }}>
+        <div className="font-body italic" style={{ color: 'rgba(255,255,255,0.72)', fontSize: 12, marginTop: 2 }}>
           Sổ tay hành trình của bạn đồng hành cùng Lão Tào
         </div>
 
-        <div className="grid grid-cols-3 mt-5">
-          <Stat label="Cắm Cờ" value={totalFlagged} accent icon={<Flag size={11} strokeWidth={2.5} />} />
-          <Stat label="Flex Điểm" value={points} accent icon={<Zap size={11} strokeWidth={2.5} />} />
+        {/* Divider */}
+        <div className="flex items-center gap-2 my-3">
+          <div className="flex-1 h-px" style={{ background: 'rgba(255,255,255,0.25)' }} />
+          <span style={{ color: 'rgba(255,255,255,0.5)', fontSize: 8 }}>✦</span>
+          <div className="flex-1 h-px" style={{ background: 'rgba(255,255,255,0.25)' }} />
+        </div>
+
+        {/* Stats */}
+        <div className="grid grid-cols-3">
+          {[
+            { label: 'Tỉnh Cắm Cờ', value: provinces.filter(p => p.status === 'flagged').length, icon: <Flag size={10} strokeWidth={2.5} /> },
+            { label: 'Địa Điểm', value: subLocations.filter(s => s.status !== 'locked').length, icon: <Map size={10} strokeWidth={2} /> },
+            { label: 'Flex Point', value: points, icon: <Zap size={10} strokeWidth={2.5} /> },
+          ].map((s, i) => (
+            <div key={s.label} className="text-center px-2" style={{ borderRight: i < 2 ? '1px solid rgba(255,255,255,0.2)' : 'none' }}>
+              <div className="font-display" style={{ fontSize: 26, fontWeight: 800, color: '#fff', lineHeight: 1, textShadow: '0 1px 4px rgba(0,0,0,0.2)' }}>{s.value}</div>
+              <div className="font-ui mt-1 inline-flex items-center gap-1" style={{ fontSize: 10, color: 'rgba(255,255,255,0.7)' }}>
+                {s.icon} {s.label}
+              </div>
+            </div>
+          ))}
+        </div>
+
+        {/* MRZ strip */}
+        <div className="mt-3 pt-2.5" style={{ borderTop: '1px solid rgba(255,255,255,0.15)' }}>
+          <div className="font-mono" style={{ fontSize: 7, color: 'rgba(255,255,255,0.25)', letterSpacing: '0.08em', wordBreak: 'break-all' }}>
+            VNMLAOTAO&lt;&lt;&lt;&lt;&lt;&lt;&lt;&lt;&lt;&lt;&lt;&lt;&lt;&lt;&lt;&lt;&lt;&lt;&lt;&lt;&lt;&lt;&lt;&lt;&lt;&lt;&lt;&lt;&lt;&lt;&lt;&lt;&lt;&lt;&lt;&lt;&lt;&lt;&lt;
+          </div>
         </div>
       </div>
 

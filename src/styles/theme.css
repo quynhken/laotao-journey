@@ -144,6 +144,14 @@
   from { transform: translateX(0); }
   to   { transform: translateX(-50%); }
 }
+@keyframes shimmer {
+  0%   { transform: translateX(-100%) skewX(-15deg); }
+  100% { transform: translateX(250%) skewX(-15deg); }
+}
+@keyframes starPulse {
+  0%, 100% { transform: scale(1); filter: drop-shadow(0 0 4px rgba(255,255,255,0.5)); }
+  50%       { transform: scale(1.15); filter: drop-shadow(0 0 10px rgba(255,255,255,0.9)); }
+}
 @keyframes bikeRide {
   0%, 100% { transform: translateY(0) rotate(-1deg); }
   25%       { transform: translateY(-2px) rotate(0.5deg); }
