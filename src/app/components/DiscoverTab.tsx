@@ -260,12 +260,12 @@ function SwipeCard({
 
         {/* Swipe overlays */}
         <motion.div className="absolute inset-0 grid place-items-center font-display"
-          style={{ background: 'rgba(45,106,63,0.88)', opacity: flagOpacity, color: '#fff', fontSize: 32, fontWeight: 800 }}>
-          CẮM CỜ
+          style={{ background: 'rgba(255,99,31,0.88)', opacity: flagOpacity, color: '#fff', fontSize: 32, fontWeight: 800 }}>
+          ❤️ THÍCH
         </motion.div>
         <motion.div className="absolute inset-0 grid place-items-center font-display"
-          style={{ background: 'rgba(155,44,44,0.88)', opacity: skipOpacity, color: '#fff', fontSize: 32, fontWeight: 800 }}>
-          LẦN SAU
+          style={{ background: 'rgba(60,60,60,0.88)', opacity: skipOpacity, color: '#fff', fontSize: 32, fontWeight: 800 }}>
+          👎 KHÔNG THÍCH
         </motion.div>
         <motion.div className="absolute inset-0 grid place-items-center font-display"
           style={{ background: 'rgba(255,99,31,0.88)', opacity: wishOpacity, color: '#fff', fontSize: 32, fontWeight: 800 }}>
