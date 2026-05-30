@@ -62,24 +62,8 @@ export function DiscoverTab({
     if (!top) return;
 
     if (action === 'flag') {
-      // Update status to flagged if not yet visited
-      const newStatus = top.status === 'locked' ? 'flagged' : top.status;
-      if (top.status === 'locked') {
-        // Optimistic update in store
-        setSettings((prev) => ({
-          ...prev,
-          subLocations: prev.subLocations.map((s) =>
-            s.id === top.id ? { ...s, status: 'flagged' as const } : s,
-          ),
-        }));
-        patchSubLocation(top.id, { status: 'flagged' });
-      }
-      onAction({ ...top, status: newStatus }, action);
-      onAddPoints(100, 'Cắm Cờ');
-      setReviewing(top);
-    } else if (action === 'wishlist') {
-      onAction(top, action);
-      onAddPoints(10, 'Wishlist');
+      react(top.id, 'like');
+      onAddPoints(1, 'Thích');
     } else {
       onAction(top, action);
     }
@@ -90,8 +74,8 @@ export function DiscoverTab({
   const top = stack[0];
 
   return (
-    <div className="flex flex-col" style={{ padding: '16px 16px 0' }}>
-      <div className="relative w-full" style={{ height: 460, overflow: 'hidden' }}>
+    <div className="flex flex-col" style={{ padding: '16px 32px 0' }}>
+      <div className="relative w-full" style={{ height: 460, overflow: 'visible' }}>
         <AnimatePresence>
           {stack.length === 0 && (
             <div
@@ -124,12 +108,12 @@ export function DiscoverTab({
         </AnimatePresence>
       </div>
 
-      <div className="flex items-center justify-center gap-8 mt-6">
+      <div className="relative flex items-center justify-center gap-8 mt-6" style={{ zIndex: 50 }}>
         {/* Không thích */}
         <button onClick={() => { if (top) { react(top.id, 'dislike'); handleDone('skip'); } }}
           className="flex flex-col items-center gap-1.5 active:scale-95 transition">
           <div className="grid place-items-center rounded-full"
-            style={{ width: 56, height: 56, border: '2px solid #F97316', background: 'var(--bg-base)', color: '#F97316', boxShadow: '0 2px 10px rgba(0,0,0,0.08)' }}>
+            style={{ width: 60, height: 60, border: '2px solid #F97316', background: '#fff', color: '#F97316', boxShadow: '0 6px 20px rgba(249,115,22,0.25), 0 2px 6px rgba(0,0,0,0.08)' }}>
             <ThumbsDown size={22} strokeWidth={2} />
           </div>
           <span className="font-ui" style={{ fontSize: 12, color: 'var(--text-secondary)', fontWeight: 600 }}>
@@ -151,7 +135,7 @@ export function DiscoverTab({
           }
         }} className="flex flex-col items-center gap-1.5 active:scale-95 transition">
           <div className="grid place-items-center rounded-full"
-            style={{ width: 56, height: 56, border: '2px solid var(--border-default)', background: 'var(--bg-base)', color: 'var(--text-secondary)', boxShadow: '0 2px 10px rgba(0,0,0,0.08)' }}>
+            style={{ width: 60, height: 60, border: '1.5px solid var(--border-default)', background: '#fff', color: 'var(--text-secondary)', boxShadow: '0 6px 20px rgba(0,0,0,0.10), 0 2px 6px rgba(0,0,0,0.06)' }}>
             <Share2 size={22} strokeWidth={2} />
           </div>
           <span className="font-ui" style={{ fontSize: 12, color: 'var(--text-secondary)', fontWeight: 600 }}>
@@ -159,11 +143,11 @@ export function DiscoverTab({
           </span>
         </button>
 
-        {/* Thích → mở review với 5 sao mặc định */}
-        <button onClick={() => { if (top) { react(top.id, 'like'); openReview(top, 5); } }}
+        {/* Thích → +1 point, chuyển card */}
+        <button onClick={() => { if (top) { react(top.id, 'like'); onAddPoints(1, 'Thích'); setStack(s => s.slice(1)); } }}
           className="flex flex-col items-center gap-1.5 active:scale-95 transition">
           <div className="grid place-items-center rounded-full"
-            style={{ width: 56, height: 56, border: 'none', background: 'var(--accent-500)', color: '#fff', boxShadow: '0 4px 14px rgba(255,99,31,0.35)' }}>
+            style={{ width: 60, height: 60, border: 'none', background: 'var(--accent-500)', color: '#fff', boxShadow: '0 8px 24px rgba(255,99,31,0.45), 0 2px 8px rgba(255,99,31,0.25)' }}>
             <Heart size={22} strokeWidth={2} fill="currentColor" />
           </div>
           <span className="font-ui" style={{ fontSize: 12, color: 'var(--text-secondary)', fontWeight: 600 }}>
@@ -194,12 +178,33 @@ export function DiscoverTab({
           }}
         />
       )}
-      {detail && (
-        <DetailSheet
-          sub={detail}
-          onClose={() => setDetail(null)}
-          onReview={() => { openReview(detail, 0); setDetail(null); }}
-        />
+      <AnimatePresence>
+        {detail && (
+          <DetailSheet
+            sub={detail}
+            onClose={() => setDetail(null)}
+            onReview={() => {}}
+          />
+        )}
+      </AnimatePresence>
+    </div>
+  );
+}
+
+function QuoteText({ quote }: { quote: string }) {
+  const [expanded, setExpanded] = useState(false);
+  const isLong = quote.length > 120;
+  return (
+    <div className="mb-3">
+      <p className="font-body italic" style={{ fontSize: 13, color: 'var(--text-secondary)', lineHeight: 1.45,
+        display: '-webkit-box', WebkitBoxOrient: 'vertical', WebkitLineClamp: expanded ? 'unset' : 3, overflow: 'hidden' } as any}>
+        {quote}
+      </p>
+      {isLong && !expanded && (
+        <button onPointerDown={e => { e.stopPropagation(); setExpanded(true); }}
+          className="font-ui mt-0.5" style={{ fontSize: 12, color: 'var(--accent-500)', fontWeight: 600 }}>
+          Xem thêm
+        </button>
       )}
     </div>
   );
@@ -215,87 +220,104 @@ function SwipeCard({
   const rotate = useTransform(x, [-200, 200], [-12, 12]);
   const flagOpacity = useTransform(x, [0, 100], [0, 1]);
   const skipOpacity = useTransform(x, [-100, 0], [1, 0]);
-  const wishOpacity = useTransform(y, [-100, 0], [1, 0]);
 
   const img = (sub.images?.[0] || sub.image) ?? '';
 
   return (
     <motion.div
       drag={interactive}
-      dragElastic={0.15}
+      dragElastic={0.08}
       dragMomentum={false}
+      dragSnapToOrigin={false}
       style={{
         x, y, rotate,
         position: 'absolute', inset: 0,
-        translateY: depth * 16,
         zIndex: 10 - depth,
         background: 'var(--bg-base)',
         borderRadius: 'var(--radius-xl)',
-        boxShadow: '0 4px 24px rgba(0,0,0,0.12)',
         overflow: 'hidden',
         cursor: interactive ? 'grab' : 'default',
         display: 'flex', flexDirection: 'column',
         touchAction: 'none',
+        transformOrigin: 'bottom center',
+        translateY: ([0, 14, 26] as number[])[depth] ?? 36,
+        boxShadow: depth === 0
+          ? '0 8px 32px rgba(0,0,0,0.14)'
+          : depth === 1 ? '0 4px 16px rgba(0,0,0,0.08)'
+          : '0 2px 8px rgba(0,0,0,0.05)',
       }}
       onDragEnd={(_, info) => {
-        const t = 100;
-        if (info.offset.x > t) onDone('flag');
-        else if (info.offset.x < -t) onDone('skip');
-        else if (info.offset.y < -t) onDone('wishlist');
-        else if (Math.abs(info.offset.x) < 10 && Math.abs(info.offset.y) < 10) onTap?.();
+        const ox = info.offset.x, oy = info.offset.y;
+        const vx = info.velocity.x, vy = info.velocity.y;
+        const swipedRight = ox > 60 || vx > 400;
+        const swipedLeft  = ox < -60 || vx < -400;
+        const tapped = Math.abs(ox) < 8 && Math.abs(oy) < 8;
+        if (swipedRight) onDone('flag');
+        else if (swipedLeft) onDone('skip');
+        else if (tapped) onTap?.();
       }}
-      initial={{ opacity: 0, scale: 0.95 }}
+      initial={{ opacity: 0, scale: 0.92 }}
       animate={{
-        opacity: ([1, 0.36, 0.2] as number[])[depth] ?? 0.1,
-        scale: ([1, 0.8, 0.64] as number[])[depth] ?? 0.5,
+        opacity: ([1, 0.7, 0.45] as number[])[depth] ?? 0,
+        scale: ([1, 0.93, 0.86] as number[])[depth] ?? 0.8,
       }}
-      exit={{ opacity: 0, scale: 0.9 }}
-      transition={{ duration: 0.25 }}
+      exit={{ opacity: 0, scale: 0.88 }}
+      transition={{ duration: 0.25, ease: [0.25, 0.46, 0.45, 0.94] }}
     >
-      {/* Image area */}
-      <div className="relative flex-1">
-        <ImageWithFallback src={img} alt={sub.name} className="w-full h-full object-cover" />
-        <div className="absolute inset-x-0 bottom-0"
-          style={{ height: '55%', background: 'linear-gradient(to top, rgba(10,10,10,0.72) 0%, transparent 100%)' }} />
+      {/* Swipe overlays — on top of everything */}
+      <motion.div className="absolute inset-0 z-20 grid place-items-center font-display rounded-[inherit]"
+        style={{ background: 'rgba(255,99,31,0.88)', opacity: flagOpacity, color: '#fff', fontSize: 32, fontWeight: 800, pointerEvents: 'none' }}>
+        ❤️ THÍCH
+      </motion.div>
+      <motion.div className="absolute inset-0 z-20 grid place-items-center font-display rounded-[inherit]"
+        style={{ background: 'rgba(60,60,60,0.88)', opacity: skipOpacity, color: '#fff', fontSize: 32, fontWeight: 800, pointerEvents: 'none' }}>
+        👎 KHÔNG THÍCH
+      </motion.div>
 
-        {/* Swipe overlays */}
-        <motion.div className="absolute inset-0 grid place-items-center font-display"
-          style={{ background: 'rgba(255,99,31,0.88)', opacity: flagOpacity, color: '#fff', fontSize: 32, fontWeight: 800 }}>
-          ❤️ THÍCH
-        </motion.div>
-        <motion.div className="absolute inset-0 grid place-items-center font-display"
-          style={{ background: 'rgba(60,60,60,0.88)', opacity: skipOpacity, color: '#fff', fontSize: 32, fontWeight: 800 }}>
-          👎 KHÔNG THÍCH
-        </motion.div>
-        <motion.div className="absolute inset-0 grid place-items-center font-display"
-          style={{ background: 'rgba(255,99,31,0.88)', opacity: wishOpacity, color: '#fff', fontSize: 32, fontWeight: 800 }}>
-          WISHLIST
-        </motion.div>
+      {/* Card layout — address card style */}
+      <div className="flex flex-col h-full px-5 pt-5 pb-4">
+        {/* Header label */}
+        <div className="flex items-center gap-1.5 mb-3">
+          <MapPin size={13} strokeWidth={2.5} style={{ color: 'var(--accent-500)', flexShrink: 0 }} />
+          <span className="font-ui" style={{ fontSize: 10, fontWeight: 700, letterSpacing: '0.1em', color: 'var(--text-tertiary)' }}>
+            ĐỊA ĐIỂM · {sub.province.toUpperCase()}
+          </span>
+        </div>
 
-        {/* Card info */}
-        <div className="absolute inset-x-0 bottom-0 px-4 pb-4">
-          <div className="font-ui mb-1.5" style={{ fontSize: 11, color: 'rgba(255,255,255,0.75)', fontWeight: 500 }}>
-            {sub.date !== '—' ? sub.date : ''}{sub.date !== '—' && sub.province ? ' / ' : ''}
-            <span style={{ color: '#fff', fontWeight: 700 }}>{sub.province}</span>
-            {sub.km > 0 && (
-              <span style={{ color: 'rgba(255,255,255,0.6)' }}> · km {sub.km}</span>
-            )}
+        {/* Location name */}
+        <h2 className="font-display mb-2" style={{ fontSize: 22, fontWeight: 800, lineHeight: 1.15, color: 'var(--text-primary)' }}>
+          {sub.name}
+        </h2>
+
+        {/* Quote below title — max 3 lines + Xem thêm */}
+        {sub.quote && sub.quote !== '"..."' && (
+          <QuoteText quote={sub.quote.replace(/"/g, '')} />
+        )}
+
+        {/* Image 4:3, căn dưới */}
+        <div className="mt-auto pt-3" style={{ pointerEvents: 'none' }}>
+          <div className="relative overflow-hidden" style={{ aspectRatio: '4/3', borderRadius: 12 }}>
+            <ImageWithFallback src={img} alt={sub.name} className="w-full h-full object-cover" draggable={false} />
           </div>
-          <p className="font-display" style={{ fontSize: 20, color: '#fff', lineHeight: 1.3, marginBottom: 10 }}>
-            {sub.quote ? sub.quote.replace(/"/g, '') : sub.name}
-          </p>
-          <div className="flex items-center gap-2">
-            <span className="font-ui px-2.5 py-0.5 rounded-full"
-              style={{ background: 'rgba(255,255,255,0.18)', backdropFilter: 'blur(6px)', color: '#fff', fontSize: 11, fontWeight: 700, border: '1px solid rgba(255,255,255,0.3)' }}>
-              {STATUS_TAG[sub.status]}
+        </div>
+
+        {/* Meta row */}
+        <div className="flex items-center gap-2 mt-3">
+          {sub.date !== '—' && (
+            <span className="font-ui px-2.5 py-1 rounded-full" style={{ fontSize: 11, fontWeight: 600, background: 'var(--accent-100)', color: 'var(--accent-600)' }}>
+              {sub.date}
             </span>
-            {sub.rating && sub.rating > 0 && (
-              <span className="font-ui px-2.5 py-0.5 rounded-full"
-                style={{ background: 'rgba(255,255,255,0.18)', backdropFilter: 'blur(6px)', color: '#fff', fontSize: 11, fontWeight: 700, border: '1px solid rgba(255,255,255,0.3)' }}>
-                ★ {sub.rating.toFixed(1)}
-              </span>
-            )}
-          </div>
+          )}
+          {sub.km > 0 && (
+            <span className="font-ui px-2.5 py-1 rounded-full" style={{ fontSize: 11, fontWeight: 600, background: 'var(--bg-elevated)', color: 'var(--text-secondary)', border: '1px solid var(--border-subtle)' }}>
+              km {sub.km}
+            </span>
+          )}
+          {sub.rating && sub.rating > 0 && (
+            <span className="font-ui px-2.5 py-1 rounded-full" style={{ fontSize: 11, fontWeight: 600, background: 'var(--bg-elevated)', color: 'var(--text-secondary)', border: '1px solid var(--border-subtle)' }}>
+              ★ {sub.rating.toFixed(1)}
+            </span>
+          )}
         </div>
       </div>
     </motion.div>
@@ -392,6 +414,12 @@ function DetailSheet({ sub, onClose, onReview }: {
 }) {
   const [reviews, setReviews] = useState<SubReview[]>([]);
   const [loading, setLoading] = useState(true);
+  const [showReviewForm, setShowReviewForm] = useState(false);
+  const [stars, setStars] = useState(5);
+  const [text, setText] = useState('');
+  const [chips, setChips] = useState<Set<string>>(new Set());
+  const [submitting, setSubmitting] = useState(false);
+  const chipOptions = ['Đẹp vãi', 'Đồ ăn ngon', 'Đường khó đi', 'Nhất định quay lại', 'Lạnh lắm', 'Đông khách'];
   const img = (sub.images?.[0] || sub.image) ?? '';
 
   useEffect(() => {
@@ -402,63 +430,116 @@ function DetailSheet({ sub, onClose, onReview }: {
     try { const d = new Date(iso); return `${d.getDate()}/${d.getMonth()+1}/${d.getFullYear()}`; } catch { return ''; }
   };
 
-  return (
-    <div className="fixed inset-0 z-40 flex items-end" onClick={onClose}
-      style={{ background: 'rgba(17,17,17,0.5)', backdropFilter: 'blur(4px)' }}>
-      <motion.div
-        initial={{ y: '100%' }} animate={{ y: 0 }} exit={{ y: '100%' }}
-        transition={{ duration: 0.28, ease: [0, 0, 0.2, 1] }}
-        onClick={e => e.stopPropagation()}
-        className="w-full max-w-[480px] mx-auto overflow-y-auto no-scrollbar"
-        style={{ background: 'var(--bg-base)', borderRadius: 'var(--radius-xl) var(--radius-xl) 0 0', maxHeight: '88dvh' }}
-      >
-        {/* Handle */}
-        <div className="sticky top-0 z-10 pt-3 pb-2 px-5" style={{ background: 'var(--bg-base)' }}>
-          <div className="w-9 h-1 rounded-full mx-auto mb-3" style={{ background: 'var(--border-default)' }} />
-        </div>
+  const handleSubmitReview = async () => {
+    setSubmitting(true);
+    const name = getVisitorName();
+    const result = await submitSubReview(sub.id, { name, stars, text, chips: Array.from(chips) });
+    if (result) {
+      setReviews(prev => [result, ...prev]);
+      setShowReviewForm(false);
+      setText(''); setChips(new Set());
+    }
+    setSubmitting(false);
+    onReview();
+  };
 
+  return (
+    <motion.div
+      className="fixed inset-0 z-50 flex flex-col"
+      style={{ background: 'var(--bg-base)' }}
+      initial={{ x: '100%' }} animate={{ x: 0 }} exit={{ x: '100%' }}
+      transition={{ duration: 0.28, ease: [0, 0, 0.2, 1] }}
+    >
+      {/* Header */}
+      <div className="flex items-center gap-3 px-4 pt-12 pb-4 shrink-0" style={{ borderBottom: '1px solid var(--border-subtle)' }}>
+        <button onClick={onClose} className="grid place-items-center rounded-full shrink-0"
+          style={{ width: 36, height: 36, background: 'var(--bg-surface)', border: '1px solid var(--border-subtle)' }}>
+          <X size={16} strokeWidth={2.5} />
+        </button>
+        <div className="flex-1 min-w-0">
+          <div className="font-ui truncate" style={{ fontSize: 11, color: 'var(--text-tertiary)' }}>
+            {sub.province}{sub.date !== '—' ? ` · ${sub.date}` : ''}
+          </div>
+          <div className="font-display truncate" style={{ fontSize: 16, fontWeight: 700 }}>{sub.name}</div>
+        </div>
+      </div>
+
+      {/* Scrollable content */}
+      <div className="flex-1 overflow-y-auto no-scrollbar">
         {/* Image */}
         {img && (
-          <div className="relative mx-4 rounded-2xl overflow-hidden" style={{ aspectRatio: '16/9' }}>
+          <div className="relative" style={{ aspectRatio: '4/3' }}>
             <ImageWithFallback src={img} alt={sub.name} className="w-full h-full object-cover" />
           </div>
         )}
 
         {/* Info */}
         <div className="px-5 pt-4 pb-2">
-          <div className="flex items-center gap-1.5 mb-1">
-            <MapPin size={11} strokeWidth={2} style={{ color: 'var(--text-tertiary)' }} />
-            <span className="font-ui" style={{ fontSize: 11, color: 'var(--text-tertiary)' }}>
-              {sub.province}{sub.km > 0 ? ` · km ${sub.km}` : ''}{sub.date !== '—' ? ` · ${sub.date}` : ''}
-            </span>
+          <h2 className="font-display" style={{ fontSize: 24, fontWeight: 800, lineHeight: 1.15 }}>{sub.name}</h2>
+          <div className="flex items-center gap-2 mt-2 flex-wrap">
+            {sub.km > 0 && <span className="font-ui px-2.5 py-1 rounded-full" style={{ fontSize: 11, background: 'var(--bg-surface)', color: 'var(--text-secondary)', border: '1px solid var(--border-subtle)' }}>km {sub.km}</span>}
+            {sub.rating && sub.rating > 0 && (
+              <span className="font-ui px-2.5 py-1 rounded-full inline-flex items-center gap-1" style={{ fontSize: 11, background: 'var(--bg-surface)', color: 'var(--text-secondary)', border: '1px solid var(--border-subtle)' }}>
+                <Star size={10} strokeWidth={0} fill="var(--accent-500)" /> {sub.rating.toFixed(1)}
+              </span>
+            )}
           </div>
-          <h2 className="font-display" style={{ fontSize: 22, fontWeight: 800, lineHeight: 1.15 }}>{sub.name}</h2>
-          {sub.rating && sub.rating > 0 && (
-            <div className="flex items-center gap-1 mt-1">
-              {[1,2,3,4,5].map(n => (
-                <Star key={n} size={13} strokeWidth={0} fill={n <= Math.round(sub.rating!) ? 'var(--accent-500)' : 'var(--border-default)'} />
-              ))}
-              <span className="font-ui ml-1" style={{ fontSize: 12, color: 'var(--text-secondary)' }}>{sub.rating.toFixed(1)}</span>
-            </div>
-          )}
           {sub.quote && sub.quote !== '"..."' && (
-            <p className="font-body italic mt-3" style={{ fontSize: 14, color: 'var(--text-secondary)', lineHeight: 1.5 }}>
+            <p className="font-body italic mt-3" style={{ fontSize: 14, color: 'var(--text-secondary)', lineHeight: 1.6 }}>
               {sub.quote}
             </p>
           )}
         </div>
 
-        {/* Review button */}
+        {/* Review form (inline toggle) */}
         <div className="px-5 pb-4">
-          <button onClick={onReview}
-            className="w-full h-11 rounded-full font-ui mt-2"
-            style={{ background: 'var(--accent-500)', color: '#fff', fontWeight: 700, fontSize: 14 }}>
-            ✍️ Viết đánh giá +20đ
-          </button>
+          {!showReviewForm ? (
+            <button onClick={() => setShowReviewForm(true)}
+              className="w-full h-11 rounded-full font-ui"
+              style={{ background: 'var(--accent-500)', color: '#fff', fontWeight: 700, fontSize: 14 }}>
+              ✍️ Viết đánh giá +20đ
+            </button>
+          ) : (
+            <div className="rounded-2xl p-4 space-y-3" style={{ background: 'var(--bg-surface)', border: '1px solid var(--border-subtle)' }}>
+              <div className="font-ui" style={{ fontSize: 13, fontWeight: 700 }}>Đánh giá của bạn</div>
+              <div className="flex gap-1">
+                {[1,2,3,4,5].map(n => (
+                  <button key={n} onClick={() => setStars(n)} style={{ fontSize: 28, color: n <= stars ? 'var(--accent-500)' : 'var(--border-default)' }}>★</button>
+                ))}
+              </div>
+              <textarea value={text} onChange={e => setText(e.target.value.slice(0, 150))}
+                placeholder="Bạn thấy chỗ này thế nào?"
+                rows={3} className="w-full p-3 outline-none resize-none font-ui"
+                style={{ background: 'var(--bg-base)', border: '1px solid var(--border-default)', borderRadius: 12, fontSize: 14 }} />
+              <div className="flex flex-wrap gap-1.5">
+                {chipOptions.map(c => {
+                  const on = chips.has(c);
+                  return (
+                    <button key={c} onClick={() => { const s = new Set(chips); on ? s.delete(c) : s.add(c); setChips(s); }}
+                      className="px-3 py-1.5 rounded-full font-ui"
+                      style={{ fontSize: 12, fontWeight: 600, background: on ? 'var(--accent-100)' : 'var(--bg-base)', border: `1px solid ${on ? 'var(--accent-500)' : 'var(--border-default)'}`, color: on ? 'var(--accent-600)' : 'var(--text-secondary)' }}>
+                      {c}
+                    </button>
+                  );
+                })}
+              </div>
+              <div className="flex gap-2">
+                <button onClick={handleSubmitReview} disabled={submitting}
+                  className="flex-1 h-10 rounded-full font-ui"
+                  style={{ background: 'var(--accent-500)', color: '#fff', fontWeight: 700, opacity: submitting ? 0.6 : 1 }}>
+                  {submitting ? 'Đang gửi...' : 'Gửi đánh giá'}
+                </button>
+                <button onClick={() => setShowReviewForm(false)} className="h-10 px-4 rounded-full font-ui"
+                  style={{ color: 'var(--text-secondary)', fontSize: 13 }}>
+                  Huỷ
+                </button>
+              </div>
+            </div>
+          )}
         </div>
 
         {/* Reviews list */}
-        <div className="px-5 pb-6">
+        <div className="px-5 pb-8">
           <div className="font-ui mb-3" style={{ fontSize: 12, fontWeight: 700, color: 'var(--text-secondary)', letterSpacing: '0.05em' }}>
             ĐÁNH GIÁ ({reviews.length})
           </div>
@@ -475,16 +556,12 @@ function DetailSheet({ sub, onClose, onReview }: {
                   <div className="flex items-center justify-between mb-1">
                     <span className="font-ui" style={{ fontSize: 13, fontWeight: 700 }}>{r.name}</span>
                     <div className="flex items-center gap-0.5">
-                      {[1,2,3,4,5].map(n => (
-                        <Star key={n} size={11} strokeWidth={0} fill={n <= r.stars ? 'var(--accent-500)' : 'var(--border-default)'} />
-                      ))}
+                      {[1,2,3,4,5].map(n => <Star key={n} size={11} strokeWidth={0} fill={n <= r.stars ? 'var(--accent-500)' : 'var(--border-default)'} />)}
                     </div>
                   </div>
                   {r.chips?.length > 0 && (
                     <div className="flex flex-wrap gap-1 mb-1.5">
-                      {r.chips.map(c => (
-                        <span key={c} className="font-ui px-2 py-0.5 rounded-full" style={{ fontSize: 10, background: 'var(--accent-100)', color: 'var(--accent-600)' }}>{c}</span>
-                      ))}
+                      {r.chips.map(c => <span key={c} className="font-ui px-2 py-0.5 rounded-full" style={{ fontSize: 10, background: 'var(--accent-100)', color: 'var(--accent-600)' }}>{c}</span>)}
                     </div>
                   )}
                   {r.text && <p className="font-ui" style={{ fontSize: 13, color: 'var(--text-secondary)', lineHeight: 1.4 }}>{r.text}</p>}
@@ -494,7 +571,7 @@ function DetailSheet({ sub, onClose, onReview }: {
             </div>
           )}
         </div>
-      </motion.div>
-    </div>
+      </div>
+    </motion.div>
   );
 }
