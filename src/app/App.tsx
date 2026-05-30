@@ -204,7 +204,7 @@ function MainApp() {
                 fontSize: 13, fontWeight: 700,
                 boxShadow: '0 4px 16px rgba(255,99,31,0.35)',
               }}>
-              +{t.points}đ · {t.label}
+              +{t.points} gem · {t.label}
             </motion.div>
           ))}
         </AnimatePresence>

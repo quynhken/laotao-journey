@@ -439,7 +439,7 @@ function HeaderSection({ draft, setDraft }: SP) {
         </button>
       </Card>
       <Card>
-        <Field label="Ví Point — số dư ban đầu / hiện tại">
+        <Field label="Gem — số dư ban đầu / hiện tại">
           <div className="flex gap-2 items-center">
             <NumInput
               value={draft.viPoint ?? 0}
@@ -2009,8 +2009,8 @@ function VisitorsSection() {
       <div className="grid grid-cols-3 gap-3 mb-4">
         {[
           { label: 'Tổng người dùng', value: visitors.length },
-          { label: 'Tổng điểm tích luỹ', value: totalPoints.toLocaleString() + 'đ' },
-          { label: 'Trung bình điểm', value: visitors.length ? Math.round(totalPoints / visitors.length).toLocaleString() + 'đ' : '—' },
+          { label: 'Tổng gem tích luỹ', value: totalPoints.toLocaleString() + ' gem' },
+          { label: 'Trung bình gem', value: visitors.length ? Math.round(totalPoints / visitors.length).toLocaleString() + ' gem' : '—' },
         ].map(s => (
           <div key={s.label} className="rounded-xl p-3" style={{ background: B.canvasPure, border: `1px solid ${B.hairline}` }}>
             <div className="font-ui" style={{ fontSize: 10, color: B.inkMuted, letterSpacing: '0.04em' }}>{s.label}</div>
@@ -2026,7 +2026,7 @@ function VisitorsSection() {
             <button key={s} onClick={() => setSortBy(s)}
               className="h-8 px-3 rounded-full font-ui"
               style={{ fontSize: 11, fontWeight: 600, background: sortBy === s ? B.orange : B.canvas, color: sortBy === s ? '#fff' : B.inkMuted, border: `1px solid ${sortBy === s ? B.orange : B.hairline}` }}>
-              {s === 'points' ? '↓ Điểm' : '↓ Mới nhất'}
+              {s === 'points' ? '↓ Gem' : '↓ Mới nhất'}
             </button>
           ))}
         </div>
@@ -2053,8 +2053,8 @@ function VisitorsSection() {
                   <span className="font-ui" style={{ fontSize: 11, color: B.inkSubtle, minWidth: 20 }}>{i + 1}.</span>
                   <span className="font-display" style={{ fontSize: 16, fontWeight: 700, color: B.ink }}>{v.name}</span>
                   {(v.points ?? 0) > 0 && (
-                    <span className="px-2 py-0.5 rounded-full font-ui" style={{ fontSize: 11, fontWeight: 700, background: '#FFF3ED', color: B.orange }}>
-                      {v.points.toLocaleString()}đ
+                    <span className="px-2 py-0.5 rounded-full font-ui inline-flex items-center gap-1" style={{ fontSize: 11, fontWeight: 700, background: '#FFF3ED', color: B.orange }}>
+                      {v.points.toLocaleString()} gem
                     </span>
                   )}
                 </div>

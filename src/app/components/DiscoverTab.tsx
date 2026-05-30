@@ -397,7 +397,7 @@ function ReviewSheet({
         <div className="flex gap-2 pt-2">
           <button onClick={() => onSubmit(stars, text, Array.from(sel))} className="flex-1 h-11 rounded-full font-ui"
             style={{ background: 'var(--accent-500)', color: '#fff', fontWeight: 700 }}>
-            Đăng Review +20đ
+            Đăng Review +20 gem
           </button>
           <button onClick={onClose} className="h-11 px-4 rounded-full font-ui"
             style={{ background: 'transparent', color: 'var(--text-secondary)' }}>
@@ -497,7 +497,7 @@ function DetailSheet({ sub, onClose, onReview }: {
             <button onClick={() => setShowReviewForm(true)}
               className="w-full h-11 rounded-full font-ui"
               style={{ background: 'var(--accent-500)', color: '#fff', fontWeight: 700, fontSize: 14 }}>
-              ✍️ Viết đánh giá +20đ
+              ✍️ Viết đánh giá +20 gem
             </button>
           ) : (
             <div className="rounded-2xl p-4 space-y-3" style={{ background: 'var(--bg-surface)', border: '1px solid var(--border-subtle)' }}>

@@ -72,7 +72,7 @@ export function QuizModal({ placeName, onClose, onComplete }: {
                 {score}/{QUESTIONS.length} câu đúng
               </h2>
               <p className="font-body italic" style={{ color: 'var(--text-secondary)' }}>
-                +{score * 50} Flex Điểm
+                +{score * 50} gem
               </p>
               <button onClick={onClose}
                 className="w-full h-11 rounded-[10px] font-ui mt-2"

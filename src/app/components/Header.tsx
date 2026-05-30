@@ -1,5 +1,6 @@
-import { Zap, Sparkles, Compass } from 'lucide-react';
+import { Gem, Compass, Gift } from 'lucide-react';
 import { useState, useEffect } from 'react';
+import { AnimatePresence, motion } from 'motion/react';
 import { useSettings } from '../store';
 
 const TYPE_SPEED = 80;
@@ -40,10 +41,40 @@ function useTypewriter(names: string[]) {
 
 type Props = { currentStop: string; points: number; onPredict: () => void; onDiscover?: () => void };
 
+function MissionScreen({ onClose }: { onClose: () => void }) {
+  return (
+    <motion.div
+      className="fixed inset-0 z-50 flex flex-col items-center justify-center"
+      style={{ background: 'var(--bg-warm)' }}
+      initial={{ y: '100%' }} animate={{ y: 0 }} exit={{ y: '100%' }}
+      transition={{ duration: 0.3, ease: [0, 0, 0.2, 1] }}
+    >
+      <button onClick={onClose} className="absolute top-12 right-4 grid place-items-center rounded-full"
+        style={{ width: 36, height: 36, background: 'var(--bg-surface)', border: '1px solid var(--border-subtle)' }}>
+        <span style={{ fontSize: 16 }}>✕</span>
+      </button>
+
+      <div className="text-center px-8">
+        <div style={{ fontSize: 72, animation: 'floatBike 2s ease-in-out infinite', display: 'inline-block' }}>🎁</div>
+        <h1 className="font-display mt-4" style={{ fontSize: 26, fontWeight: 800 }}>Nhiệm Vụ</h1>
+        <p className="font-ui mt-3" style={{ fontSize: 15, color: 'var(--text-secondary)', lineHeight: 1.6 }}>
+          Tính năng nhiệm vụ đang được<br />phát triển. Sắp ra mắt!
+        </p>
+        <div className="mt-6 px-5 py-3 rounded-full font-ui inline-block"
+          style={{ background: 'var(--accent-100)', color: 'var(--accent-600)', fontSize: 13, fontWeight: 700 }}>
+          🚧 Coming soon
+        </div>
+      </div>
+    </motion.div>
+  );
+}
+
 export function Header({ currentStop, points, onPredict, onDiscover }: Props) {
   const settings = useSettings();
   const name = useTypewriter(settings.header.typewriterNames);
+  const [showMission, setShowMission] = useState(false);
   return (
+    <>
     <header
       className="sticky top-0 z-30 flex items-center justify-between px-4 h-14"
       style={{ background: 'var(--bg-surface)', borderBottom: '1px solid var(--border-subtle)' }}
@@ -88,16 +119,21 @@ export function Header({ currentStop, points, onPredict, onDiscover }: Props) {
         )}
         <div className="flex items-center gap-1 px-2.5 h-8 rounded-full"
           style={{ background: 'var(--accent-100)', border: '1px solid var(--accent-300)', color: 'var(--accent-600)', fontSize: 12, fontWeight: 700 }}>
-          <Zap size={11} strokeWidth={2.5} />
+          <Gem size={11} strokeWidth={2} />
           <span className="font-ui">{points}</span>
         </div>
-        <button onClick={onPredict}
-          aria-label="Dự đoán"
-          className="w-8 h-8 rounded-full grid place-items-center transition"
-          style={{ background: 'var(--bg-surface)', border: '1px solid var(--border-default)', color: 'var(--text-secondary)' }}>
-          <Sparkles size={15} strokeWidth={1.8} />
+        <button onClick={() => setShowMission(true)} style={{ marginLeft: 10 }}
+          aria-label="Nhiệm vụ"
+          className="w-8 h-8 rounded-full grid place-items-center transition active:scale-90"
+          style={{ background: 'var(--accent-500)', color: '#fff', animation: 'floatBike 2s ease-in-out infinite', boxShadow: '0 2px 8px rgba(255,99,31,0.3)' }}>
+          <Gift size={15} strokeWidth={2} />
         </button>
       </div>
     </header>
+
+    <AnimatePresence>
+      {showMission && <MissionScreen onClose={() => setShowMission(false)} />}
+    </AnimatePresence>
+    </>
   );
 }

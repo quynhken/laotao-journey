@@ -1,6 +1,6 @@
 import {
   Compass, Film, Flag, Sparkles, BookOpen, Star, Layers, PenLine,
-  Map, Zap, Award, type LucideIcon,
+  Map, Gem, Award, type LucideIcon,
 } from 'lucide-react';
 import { STOPS, BADGES, REGION_COLOR, REGION_LABEL, type Region } from './data';
 import { useSettings } from '../store';
@@ -79,7 +79,7 @@ export function FlexBookTab({ flagged, points }: { flagged: Set<number>; points:
           {[
             { label: 'Tỉnh Cắm Cờ', value: provinces.filter(p => p.status === 'flagged').length, icon: <Flag size={10} strokeWidth={2.5} /> },
             { label: 'Địa Điểm', value: subLocations.filter(s => s.status !== 'locked').length, icon: <Map size={10} strokeWidth={2} /> },
-            { label: 'Flex Point', value: points, icon: <Zap size={10} strokeWidth={2.5} /> },
+            { label: 'Gem', value: points, icon: <Gem size={10} strokeWidth={2} /> },
           ].map((s, i) => (
             <div key={s.label} className="text-center px-2" style={{ borderRight: i < 2 ? '1px solid rgba(255,255,255,0.2)' : 'none' }}>
               <div className="font-display" style={{ fontSize: 26, fontWeight: 800, color: '#fff', lineHeight: 1, textShadow: '0 1px 4px rgba(0,0,0,0.2)' }}>{s.value}</div>
