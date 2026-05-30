@@ -52,6 +52,16 @@ export function MapTab({ flagged, onFlag, onQuiz }: Props) {
 
   const progressPct = (CURRENT_KM / TOTAL_KM) * 100;
 
+  // The single sublocation with the highest locNum overall (current position on journey)
+  const latestSub = useMemo(
+    () => SUB_LOCATIONS.filter(s => s.status !== 'locked').reduce<SubLocation | null>(
+      (best, s) => (!best || s.locNum > best.locNum) ? s : best, null
+    ),
+    [SUB_LOCATIONS],
+  );
+  // Province that contains the latest sub
+  const latestProvinceId = latestSub?.provinceId ?? -1;
+
   // Sub-locations for the active province
   const provinceSubs = useMemo(
     () => activeProvince ? SUB_LOCATIONS.filter(s => s.provinceId === activeProvince.id) : [],
@@ -208,6 +218,7 @@ export function MapTab({ flagged, onFlag, onQuiz }: Props) {
         {level === 'provinces' && PROVINCES.map(p => {
           const color = provColor(p);
           const isActive = activeProvince?.id === p.id;
+          const isLatest = p.status === 'flagged';
           return (
             <Marker key={`prov-${p.id}`} longitude={p.lng} latitude={p.lat} anchor="center">
               <button
@@ -221,6 +232,10 @@ export function MapTab({ flagged, onFlag, onQuiz }: Props) {
                 }}
                 aria-label={p.name}
               >
+                {isLatest && (<>
+                  <span style={{ position: 'absolute', top: 0, left: 0, width: 40, height: 40, borderRadius: '50%', background: color, opacity: 0.4, animation: 'pulseRing 2s ease-out infinite' }} />
+                  <span style={{ position: 'absolute', top: 0, left: 0, width: 40, height: 40, borderRadius: '50%', background: color, opacity: 0.2, animation: 'pulseRing 2s ease-out infinite 0.75s' }} />
+                </>)}
                 <div style={{
                   position: 'absolute', top: 0, left: 0, width: 40, height: 40,
                   borderRadius: '50%', overflow: 'hidden',
@@ -257,19 +272,28 @@ export function MapTab({ flagged, onFlag, onQuiz }: Props) {
           const locked = s.status === 'locked';
           const color  = subColor(s);
           const isSel  = selected?.id === s.id;
+          const isTop  = subDisplayIndex[s.id] === provinceSubs.length; // highest index = latest
+          const sz = isSel ? 44 : 36;
           return (
             <Marker key={`sub-${s.id}`} longitude={s.lng} latitude={s.lat} anchor="center">
               <button
                 onClick={(e) => { e.stopPropagation(); setSelected(sel => sel?.id === s.id ? null : s); }}
                 style={{
-                  width: isSel ? 44 : 36, height: isSel ? 44 : 36,
+                  width: sz, height: sz,
                   borderRadius: '50%', cursor: 'pointer',
                   overflow: 'visible', padding: 0, background: 'transparent', flexShrink: 0,
-                  transition: 'all 200ms cubic-bezier(0.34,1.56,0.64,1)',
+                  transition: 'transform 200ms cubic-bezier(0.34,1.56,0.64,1)',
                   zIndex: isSel ? 10 : 1,
                 }}
                 aria-label={s.name}
+                onMouseEnter={e => (e.currentTarget.style.transform = 'scale(1.25)')}
+                onMouseLeave={e => (e.currentTarget.style.transform = 'scale(1)')}
               >
+                {/* Pulse — only on the highest-index sublocation */}
+                {isTop && !locked && (<>
+                  <span style={{ position: 'absolute', top: 0, left: 0, width: sz, height: sz, borderRadius: '50%', background: color, opacity: 0.4, animation: 'pulseRing 2s ease-out infinite' }} />
+                  <span style={{ position: 'absolute', top: 0, left: 0, width: sz, height: sz, borderRadius: '50%', background: color, opacity: 0.2, animation: 'pulseRing 2s ease-out infinite 0.75s' }} />
+                </>)}
                 <div style={{
                   position: 'absolute', inset: 0,
                   width: isSel ? 44 : 36, height: isSel ? 44 : 36,
