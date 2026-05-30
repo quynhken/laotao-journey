@@ -804,7 +804,7 @@ function ProvincesSection({ draft, setDraft }: SP) {
                     <div className="rounded overflow-hidden" style={{ border: `1px solid ${B.hairline}`, minWidth: 560 }}>
                       <div className="grid px-3 py-1.5 font-ui"
                         style={{ gridTemplateColumns: '16px 20px 1fr 120px 110px 52px 30px 28px', background: B.canvas, fontSize: 10, fontWeight: 700, color: B.inkMuted }}>
-                        <div></div><div>#</div><div>Tên địa điểm</div><div>Check-in</div><div>Trạng thái</div><div></div><div></div><div title="Toạ độ">📍</div>
+                        <div></div><div>#</div><div>Tên địa điểm</div><div>Số tập</div><div>Trạng thái</div><div></div><div></div><div title="Toạ độ">📍</div>
                       </div>
                       {provSubs.length === 0 && (
                         <div className="px-3 py-2 font-ui" style={{ fontSize: 11, color: B.inkSubtle }}>Chưa có địa điểm</div>
@@ -821,13 +821,15 @@ function ProvincesSection({ draft, setDraft }: SP) {
                             <GripVertical size={12} style={{ color: B.inkSubtle }} />
                             <span className="font-ui" style={{ fontSize: 11, color: B.inkSubtle }}>{idx + 1}</span>
                             <TextInput value={s.name} onChange={(e) => updateSub(s.id, { name: e.target.value })} style={{ height: 30, fontSize: 11, padding: '0 8px' }} />
-                            <div className="relative">
-                              <input type="date" value={s.date === '—' ? '' : s.date}
-                                onChange={(e) => updateSub(s.id, { date: e.target.value || '—' })}
-                                className="h-[30px] w-full pl-2 pr-7 font-ui outline-none rounded"
-                                style={{ ...inputStyle, fontSize: 11 }} />
-                              <CalendarDays size={12} className="absolute right-2 top-1/2 -translate-y-1/2 pointer-events-none" style={{ color: B.inkMuted }} />
-                            </div>
+                            <select
+                              value={s.episode ?? 1}
+                              onChange={(e) => { const ep = Number(e.target.value); updateSub(s.id, { episode: ep }); patchSubLocation(s.id, { episode: ep }); }}
+                              className="h-[30px] w-full px-2 font-ui outline-none rounded"
+                              style={{ ...inputStyle, fontSize: 11 }}>
+                              {Array.from({ length: 10 }, (_, i) => i + 1).map(ep => (
+                                <option key={ep} value={ep}>Tập {ep}</option>
+                              ))}
+                            </select>
                             <StatusButton status={s.status} onChange={(st) => updateSubStatus(s.id, st)} />
                             <div className="flex flex-col gap-0.5">
                               <button onClick={() => moveSubUp(s.id)} disabled={idx === 0}

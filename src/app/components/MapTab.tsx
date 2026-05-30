@@ -591,19 +591,19 @@ export function MapTab({ flagged, onFlag, onQuiz }: Props) {
                 {selected.date && selected.date !== '—' && ` · ${selected.date}`}
               </div>
 
-              {/* Title: video title if available, else location name */}
-              <h2 className="font-display line-clamp-2" style={{ fontSize: 16, lineHeight: 1.25, fontWeight: 700, marginBottom: selected.videoUrl ? 4 : 0 }}>
-                {selected.videoTitle || selected.name}
+              {/* Primary: location name */}
+              <h2 className="font-display line-clamp-2" style={{ fontSize: 16, lineHeight: 1.25, fontWeight: 700, marginBottom: 4 }}>
+                {selected.name}
               </h2>
 
-              {/* Sub-info: if video, show location name below title; else show quote */}
-              {selected.videoUrl && selected.videoTitle && (
-                <div className="font-ui" style={{ fontSize: 11, color: 'var(--text-tertiary)' }}>
-                  📍 {selected.name}
-                </div>
+              {/* Secondary: video title */}
+              {selected.videoTitle && (
+                <p className="font-ui line-clamp-2" style={{ fontSize: 12, color: 'var(--text-secondary)', lineHeight: 1.4 }}>
+                  {selected.videoTitle}
+                </p>
               )}
-              {!selected.videoUrl && selected.quote && selected.quote !== '"..."' && (
-                <p className="font-body italic mt-1 line-clamp-2" style={{ color: 'var(--text-secondary)', fontSize: 13, lineHeight: 1.5 }}>
+              {!selected.videoTitle && selected.quote && selected.quote !== '"..."' && (
+                <p className="font-body italic line-clamp-2" style={{ color: 'var(--text-secondary)', fontSize: 13, lineHeight: 1.5 }}>
                   {selected.quote.replace(/"/g, '')}
                 </p>
               )}

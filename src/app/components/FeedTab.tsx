@@ -95,13 +95,13 @@ export function FeedTab() {
                 </div>
               </div>
               <div className="p-4">
-                <div className="font-ui inline-flex items-center gap-1"
+                <div className="font-ui inline-flex items-center gap-1 mb-1"
                   style={{ fontSize: 11, letterSpacing: '0.06em', color: 'var(--text-tertiary)' }}>
                   <MapPin size={11} strokeWidth={2} />
-                  {v.place.toUpperCase()} · {v.date}
+                  {v.date}
                 </div>
-                <h3 className="font-display mt-1" style={{ fontSize: 17, lineHeight: 1.25 }}>{v.title}</h3>
-                <p className="font-body italic mt-1" style={{ color: 'var(--text-secondary)', fontSize: 14 }}>{v.quote}</p>
+                <h3 className="font-display" style={{ fontSize: 18, fontWeight: 800, lineHeight: 1.2 }}>{v.place}</h3>
+                <p className="font-ui mt-1" style={{ color: 'var(--text-secondary)', fontSize: 13, lineHeight: 1.4 }}>{v.title}</p>
                 <a href={v.url} target="_blank" rel="noopener noreferrer"
                   className="mt-3 inline-flex items-center gap-1.5 px-4 h-9 rounded-full font-ui"
                   style={{ background: '#FF0000', color: '#fff', fontSize: 12, fontWeight: 700 }}>
