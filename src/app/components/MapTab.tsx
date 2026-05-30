@@ -69,6 +69,11 @@ export function MapTab({ flagged, onFlag, onQuiz }: Props) {
     () => filterChip === 0 ? provinceSubs : provinceSubs.filter(s => s.episode === filterChip),
     [provinceSubs, filterChip],
   );
+  // Display index = position in full provinceSubs list (1-based), ignoring gaps in locNum
+  const subDisplayIndex = useMemo(
+    () => provinceSubs.reduce<Record<number, number>>((acc, s, i) => { acc[s.id] = i + 1; return acc; }, {}),
+    [provinceSubs],
+  );
 
   // ── Dash animation ──────────────────────────────────────────────────────
   useEffect(() => {
@@ -291,7 +296,7 @@ export function MapTab({ flagged, onFlag, onQuiz }: Props) {
                   fontFamily: "'Be Vietnam Pro', sans-serif",
                   border: '1.5px solid #fff', padding: '0 3px', lineHeight: 1, zIndex: 3,
                 }}>
-                  {s.locNum}
+                  {subDisplayIndex[s.id]}
                 </span>
               </button>
             </Marker>
@@ -425,7 +430,7 @@ export function MapTab({ flagged, onFlag, onQuiz }: Props) {
                     className="shrink-0 inline-flex items-center gap-1 px-2.5 py-1 rounded-full font-ui"
                     style={{ background: active ? color : 'rgba(253,250,246,0.93)', border: `1.5px solid ${active ? color : 'rgba(216,210,200,0.9)'}`, color: active ? '#fff' : s.status==='locked' ? 'var(--text-tertiary)' : color, fontSize: 11, fontWeight: 700, backdropFilter: 'blur(8px)', boxShadow: active ? `0 2px 8px ${color}40` : '0 1px 4px rgba(0,0,0,0.08)', opacity: s.status==='locked' && !active ? 0.7 : 1, transition: 'all 150ms ease' }}>
                     <span style={{ width:5, height:5, borderRadius:'50%', background: active ? 'rgba(255,255,255,0.75)' : s.status==='locked' ? 'var(--text-tertiary)' : color, display:'inline-block', flexShrink:0 }} />
-                    {s.locNum}. {s.name}
+                    {subDisplayIndex[s.id]}. {s.name}
                   </button>
                 );
               })}
@@ -510,7 +515,7 @@ export function MapTab({ flagged, onFlag, onQuiz }: Props) {
                   TẬP {String(selected.episode).padStart(2,'0')}
                 </span>
                 <span className="px-2 py-0.5 rounded-full font-ui" style={{ background: 'rgba(255,255,255,0.92)', color: 'var(--text-primary)', fontSize: 10, fontWeight: 700 }}>
-                  #{selected.locNum}
+                  #{subDisplayIndex[selected.id]}
                 </span>
               </div>
 

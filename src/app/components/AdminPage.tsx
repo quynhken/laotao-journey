@@ -740,7 +740,17 @@ function ProvincesSection({ draft, setDraft }: SP) {
                   setDraft(prev => ({ ...prev, subLocations: prev.subLocations.map((s) => s.id === sid ? { ...s, ...patch } : s) }));
                 const removeSub = (sid: number) => {
                   if (!confirm('Xoá địa điểm này?')) return;
-                  setDraft(prev => ({ ...prev, subLocations: prev.subLocations.filter((s) => s.id !== sid) }));
+                  setDraft(prev => {
+                    const provId = prev.subLocations.find(s => s.id === sid)?.provinceId;
+                    const remaining = prev.subLocations.filter(s => s.id !== sid);
+                    const renum = remaining
+                      .filter(s => s.provinceId === provId)
+                      .sort((a, b) => a.locNum - b.locNum)
+                      .map((s, i) => ({ ...s, locNum: i + 1 }));
+                    // Sync new locNums to server
+                    renum.forEach(s => patchSubLocation(s.id, { locNum: s.locNum }));
+                    return { ...prev, subLocations: remaining.map(s => renum.find(r => r.id === s.id) ?? s) };
+                  });
                   deleteSubLocation(sid);
                 };
                 const updateSubStatus = (sid: number, status: SubLocation['status']) => {
@@ -1028,7 +1038,16 @@ function SubLocationsSection({ draft, setDraft }: SP) {
   };
   const remove = (id: number) => {
     if (!confirm('Xoá địa điểm này?')) return;
-    setDraft(prev => ({ ...prev, subLocations: prev.subLocations.filter((s) => s.id !== id) }));
+    setDraft(prev => {
+      const provId = prev.subLocations.find(s => s.id === id)?.provinceId;
+      const remaining = prev.subLocations.filter(s => s.id !== id);
+      const renum = remaining
+        .filter(s => s.provinceId === provId)
+        .sort((a, b) => a.locNum - b.locNum)
+        .map((s, i) => ({ ...s, locNum: i + 1 }));
+      renum.forEach(s => patchSubLocation(s.id, { locNum: s.locNum }));
+      return { ...prev, subLocations: remaining.map(s => renum.find(r => r.id === s.id) ?? s) };
+    });
     deleteSubLocation(id);
   };
   const add = (targetPid: number) => {
@@ -1078,13 +1097,36 @@ function SubLocationsSection({ draft, setDraft }: SP) {
       </SectionTitle>
 
       {/* Filter bar */}
-      <div className="flex gap-2 mb-4">
+      <div className="flex gap-2 mb-4 flex-wrap">
         <TextInput placeholder="Tìm theo tên / quote..." value={q} onChange={(e) => setQ(e.target.value)} />
         <select value={pid} onChange={(e) => setPid(e.target.value === 'all' ? 'all' : Number(e.target.value))}
           className="h-10 px-2 font-ui" style={{ ...inputStyle, fontSize: 12, minWidth: 180 }}>
           <option value="all">Tất cả tỉnh</option>
           {draft.provinces.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
         </select>
+        <button
+          onClick={() => {
+            if (!confirm('Đánh số lại toàn bộ địa điểm từ #1 theo thứ tự hiện tại?')) return;
+            setDraft(prev => {
+              const allSubs = [...prev.subLocations];
+              const provIds = [...new Set(allSubs.map(s => s.provinceId))];
+              const renumbered = allSubs.map(s => ({ ...s }));
+              provIds.forEach(pid => {
+                const group = renumbered
+                  .filter(s => s.provinceId === pid)
+                  .sort((a, b) => a.locNum - b.locNum);
+                group.forEach((s, i) => {
+                  s.locNum = i + 1;
+                  patchSubLocation(s.id, { locNum: i + 1 });
+                });
+              });
+              return { ...prev, subLocations: renumbered };
+            });
+          }}
+          className="h-10 px-3 rounded-full font-ui inline-flex items-center gap-1.5 shrink-0"
+          style={{ background: B.canvas, border: `1px solid ${B.hairline}`, fontSize: 12, color: B.inkMuted }}>
+          <RotateCcw size={12} /> Đánh số lại
+        </button>
       </div>
 
       {/* Grouped by Province */}
@@ -1123,10 +1165,11 @@ function SubLocationsSection({ draft, setDraft }: SP) {
                   )}
 
                   <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-                    {subs.map((s) => (
+                    {subs.map((s, idx) => (
                       <SubLocationCard
                         key={s.id}
                         s={s}
+                        displayNum={idx + 1}
                         provImg={draft.provinces.find((p) => p.id === s.provinceId)?.image ?? ''}
                         onUpdate={(patch) => update(s.id, patch)}
                         onRemove={() => remove(s.id)}
@@ -1172,9 +1215,10 @@ function compressForUpload(file: File, maxPx = 1200, quality = 0.88): Promise<st
 }
 
 function SubLocationCard({
-  s, provImg, onUpdate, onRemove,
+  s, displayNum, provImg, onUpdate, onRemove,
 }: {
   s: SubLocation;
+  displayNum: number;
   provImg: string;
   onUpdate: (patch: Partial<SubLocation>) => void;
   onRemove: () => void;
@@ -1240,7 +1284,7 @@ function SubLocationCard({
         {/* Bottom info */}
         <div className="absolute inset-x-0 bottom-0 px-3 pb-3">
           <div className="font-ui mb-0.5" style={{ fontSize: 10, color: 'rgba(255,255,255,0.65)' }}>
-            #{s.locNum} · {s.date !== '—' ? s.date : 'Chưa có ngày'}
+            #{displayNum} · {s.date !== '—' ? s.date : 'Chưa có ngày'}
           </div>
           <div className="font-display" style={{ fontSize: 15, color: '#fff', lineHeight: 1.2, fontWeight: 700 }}>
             {s.name}
@@ -1297,6 +1341,19 @@ function SubLocationCard({
                   <StatusButton status={s.status} onChange={(v) => onUpdate({ status: v })} />
                 </Field>
               </div>
+
+              {/* Row 2 — Episode */}
+              <Field label="Số tập">
+                <div className="flex gap-1.5 flex-wrap">
+                  {Array.from({ length: 10 }, (_, i) => i + 1).map(ep => (
+                    <button key={ep} onClick={() => onUpdate({ episode: ep })}
+                      className="h-8 w-8 rounded-full font-ui shrink-0"
+                      style={{ fontSize: 13, fontWeight: 700, background: s.episode === ep ? B.orange : B.canvas, color: s.episode === ep ? '#fff' : B.inkMuted, border: `1.5px solid ${s.episode === ep ? B.orange : B.hairline}` }}>
+                      {ep}
+                    </button>
+                  ))}
+                </div>
+              </Field>
 
               {/* Quiz toggle */}
               <div className="flex items-center justify-between py-1 px-1">
