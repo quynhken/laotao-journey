@@ -251,7 +251,7 @@ function Onboarding({ name, setName, onStart }: {
       <div className="overflow-hidden pt-5 pb-4">
         <div className="flex gap-2.5 animate-marquee pl-5" style={{ width: 'max-content' }}>
           {[...slides, ...slides].map((src, i) => (
-            <div key={i} className="flex-shrink-0 rounded-xl overflow-hidden"
+            <div key={i} className="flex-shrink-0 overflow-hidden"
               style={{ width: 108, aspectRatio: '3/4' }}>
               <img src={src} alt="" className="w-full h-full object-cover" loading="eager" />
             </div>
