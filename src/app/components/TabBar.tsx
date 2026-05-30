@@ -6,7 +6,7 @@ const TABS: { key: TabKey; Icon: LucideIcon; label: string }[] = [
   { key: 'map',      Icon: Map,       label: 'Bản Đồ'   },
   { key: 'feed',     Icon: Newspaper, label: 'Bảng Tin' },
   { key: 'discover', Icon: Layers,    label: 'Khám Phá' },
-  { key: 'flex',     Icon: BookOpen,  label: 'Flex Book' },
+  { key: 'flex',     Icon: BookOpen,  label: 'Hộ Chiếu' },
 ];
 
 export function TabBar({ active, onChange }: { active: TabKey; onChange: (k: TabKey) => void }) {

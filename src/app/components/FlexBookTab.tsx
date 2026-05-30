@@ -156,8 +156,8 @@ function Stamp({ num, name, date, region, visited, locked }: {
         border: `2px dashed ${visited ? color : 'var(--border-default)'}`,
         borderRadius: '50%',
         background: visited ? `${color}14` : 'transparent',
-        opacity: locked ? 0.3 : 1,
-        filter: locked ? 'grayscale(1)' : 'none',
+        opacity: locked ? 0.55 : 1,
+        filter: locked ? 'grayscale(0.6)' : 'none',
         animation: visited ? 'stampIn 500ms var(--ease-spring) both' : 'none',
       }}
     >
