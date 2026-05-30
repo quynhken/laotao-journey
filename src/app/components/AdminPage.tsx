@@ -160,15 +160,17 @@ function AdminPanel({ onLogout }: { onLogout: () => void }) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [pulledOnce]);
 
-  const dirty = JSON.stringify(draft) !== JSON.stringify(settings);
+  // onboardingPhotos are managed directly via state (not draft) — always take live value
+  const draftWithLivePhotos = { ...draft, onboardingPhotos: settings.onboardingPhotos ?? [] };
+  const dirty = JSON.stringify(draftWithLivePhotos) !== JSON.stringify(settings);
 
   const save = async () => {
-    setSettings(draft);
-    await pushSettings(draft);
+    setSettings(draftWithLivePhotos);
+    await pushSettings(draftWithLivePhotos);
     setSavedAt(Date.now());
     setTimeout(() => setSavedAt(null), 1800);
   };
-  const discard = () => setDraft(settings);
+  const discard = () => setDraft({ ...settings, onboardingPhotos: settings.onboardingPhotos ?? [] });
   const reset = () => {
     if (!confirm('Khôi phục về mặc định? Tất cả thay đổi sẽ mất.')) return;
     resetSettings();
