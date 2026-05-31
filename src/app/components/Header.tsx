@@ -41,6 +41,18 @@ function useTypewriter(names: string[]) {
 
 type Props = { currentStop: string; points: number; onPredict: () => void; onDiscover?: () => void };
 
+function Avatar({ name, size = 52 }: { name: string; size?: number }) {
+  const bgColors = ['#FFE9DA','#FFF3CD','#E8F0FB','#E8F5EE','#F0EBFF','#FFE8F3'];
+  const txtColors = ['#FF631F','#E8A000','#2D6A9F','#2D6A3F','#7C3AED','#DB2777'];
+  const idx = name.charCodeAt(0) % bgColors.length;
+  return (
+    <div className="grid place-items-center font-display shrink-0"
+      style={{ width: size, height: size, borderRadius: '50%', background: bgColors[idx], color: txtColors[idx], fontSize: size * 0.38, fontWeight: 800 }}>
+      {name.charAt(0).toUpperCase()}
+    </div>
+  );
+}
+
 function LeaderboardScreen({ onClose }: { onClose: () => void }) {
   const [visitors, setVisitors] = useState<Visitor[]>([]);
   const [loading, setLoading] = useState(true);
@@ -52,7 +64,18 @@ function LeaderboardScreen({ onClose }: { onClose: () => void }) {
     });
   }, []);
 
-  const medals = ['🥇', '🥈', '🥉'];
+  const top3 = visitors.slice(0, 3); // [1st, 2nd, 3rd]
+  const rest = visitors.slice(3);
+
+  // Podium order: 2nd | 1st | 3rd
+  const podiumOrder = [top3[1], top3[0], top3[2]];
+  const podiumColors = [
+    'linear-gradient(180deg, #A8C4E8 0%, #7BA3D0 100%)',   // 2nd — blue
+    'linear-gradient(180deg, #F5C842 0%, #E8A000 100%)',   // 1st — gold
+    'linear-gradient(180deg, #E8A090 0%, #D07060 100%)',   // 3rd — salmon
+  ];
+  const podiumHeights = [90, 130, 75];
+  const podiumRanks = [2, 1, 3];
 
   return (
     <motion.div className="fixed inset-0 z-50 flex flex-col items-center" style={{ background: 'rgba(0,0,0,0.3)', backdropFilter: 'blur(4px)' }}
@@ -61,46 +84,76 @@ function LeaderboardScreen({ onClose }: { onClose: () => void }) {
     <motion.div className="flex flex-col w-full max-w-[480px] h-full" style={{ background: 'var(--bg-warm)' }}
       initial={{ y: '100%' }} animate={{ y: 0 }} exit={{ y: '100%' }}
       transition={{ duration: 0.3, ease: [0, 0, 0.2, 1] }}>
-      <div className="flex items-center gap-3 px-4 pt-12 pb-4 shrink-0"
-        style={{ borderBottom: '1px solid var(--border-subtle)' }}>
+
+      {/* Header */}
+      <div className="flex items-center gap-3 px-4 pt-12 pb-4 shrink-0">
         <button onClick={onClose} className="grid place-items-center rounded-full shrink-0"
           style={{ width: 36, height: 36, background: 'var(--bg-surface)', border: '1px solid var(--border-subtle)' }}>
           <span style={{ fontSize: 16 }}>✕</span>
         </button>
-        <div>
-          <div className="font-display" style={{ fontSize: 18, fontWeight: 800 }}>Bảng Xếp Hạng</div>
+        <div className="flex-1 text-center">
+          <div className="font-display" style={{ fontSize: 20, fontWeight: 800 }}>Bảng Xếp Hạng</div>
           <div className="font-ui" style={{ fontSize: 11, color: 'var(--text-tertiary)' }}>Top 10 cày gem nhiều nhất</div>
         </div>
+        <div style={{ width: 36 }} />
       </div>
 
-      <div className="flex-1 overflow-y-auto no-scrollbar px-4 py-4">
+      <div className="flex-1 overflow-y-auto no-scrollbar">
         {loading ? (
           <div className="text-center py-12 font-ui" style={{ color: 'var(--text-tertiary)' }}>Đang tải...</div>
         ) : visitors.length === 0 ? (
           <div className="text-center py-12 font-ui" style={{ color: 'var(--text-tertiary)' }}>Chưa có dữ liệu</div>
-        ) : (
-          <div className="flex flex-col gap-2">
-            {visitors.map((v, i) => (
-              <div key={v.id} className="flex items-center gap-3 px-4 py-3 rounded-2xl"
-                style={{ background: i === 0 ? 'linear-gradient(135deg, #FFF3CD, #FFE082)' : i === 1 ? 'linear-gradient(135deg, #F5F5F5, #E8E8E8)' : i === 2 ? 'linear-gradient(135deg, #FFDCC7, #FFC9A0)' : 'var(--bg-surface)', border: '1px solid var(--border-subtle)' }}>
-                <span style={{ fontSize: 22, minWidth: 28, textAlign: 'center' }}>
-                  {medals[i] ?? `${i + 1}`}
-                </span>
-                <div className="flex-1 min-w-0">
-                  <div className="font-display truncate" style={{ fontSize: 15, fontWeight: 700 }}>{v.name}</div>
-                  <div className="font-ui" style={{ fontSize: 11, color: 'var(--text-tertiary)' }}>
-                    {v.device ?? ''}{v.os ? ` · ${v.os}` : ''}
+        ) : (<>
+          {/* Podium — Top 3 */}
+          {top3.length >= 1 && (
+            <div className="px-6 pt-4 pb-0">
+              <div className="flex items-end justify-center gap-3">
+                {podiumOrder.map((v, pi) => v ? (
+                  <div key={v.id} className="flex flex-col items-center" style={{ flex: 1 }}>
+                    {/* Avatar + name above podium */}
+                    <Avatar name={v.name} size={pi === 1 ? 60 : 48} />
+                    <div className="font-display mt-2 text-center truncate w-full px-1"
+                      style={{ fontSize: pi === 1 ? 13 : 11, fontWeight: 700 }}>{v.name}</div>
+                    <div className="flex items-center gap-0.5 font-ui mt-0.5"
+                      style={{ fontSize: 11, color: 'var(--accent-500)', fontWeight: 700 }}>
+                      <Gem size={10} strokeWidth={2} />{(v.points ?? 0).toLocaleString()}
+                    </div>
+                    {/* Podium block */}
+                    <div className="w-full mt-2 flex items-center justify-center rounded-t-2xl"
+                      style={{ height: podiumHeights[pi], background: podiumColors[pi] }}>
+                      <span className="font-display" style={{ fontSize: podiumHeights[pi] * 0.38, fontWeight: 900, color: 'rgba(255,255,255,0.85)' }}>
+                        {podiumRanks[pi]}
+                      </span>
+                    </div>
+                  </div>
+                ) : <div key={pi} style={{ flex: 1 }} />)}
+              </div>
+            </div>
+          )}
+
+          {/* Rest #4–10 */}
+          {rest.length > 0 && (
+            <div className="px-4 pt-3 pb-6 flex flex-col gap-2">
+              {rest.map((v, i) => (
+                <div key={v.id} className="flex items-center gap-3 px-4 py-3 rounded-2xl"
+                  style={{ background: 'var(--bg-surface)', border: '1px solid var(--border-subtle)' }}>
+                  <span className="font-ui shrink-0" style={{ fontSize: 13, fontWeight: 700, color: 'var(--text-tertiary)', minWidth: 20 }}>{i + 4}</span>
+                  <Avatar name={v.name} size={36} />
+                  <div className="flex-1 min-w-0">
+                    <div className="font-display truncate" style={{ fontSize: 14, fontWeight: 700 }}>{v.name}</div>
+                    <div className="font-ui" style={{ fontSize: 11, color: 'var(--text-tertiary)' }}>
+                      {v.device ?? ''}{v.os ? ` · ${v.os}` : ''}
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-1 font-ui shrink-0"
+                    style={{ fontSize: 13, fontWeight: 800, color: 'var(--accent-500)' }}>
+                    <Gem size={12} strokeWidth={2} />{(v.points ?? 0).toLocaleString()}
                   </div>
                 </div>
-                <div className="flex items-center gap-1 font-ui shrink-0"
-                  style={{ fontSize: 14, fontWeight: 800, color: 'var(--accent-500)' }}>
-                  <Gem size={13} strokeWidth={2} />
-                  {(v.points ?? 0).toLocaleString()}
-                </div>
-              </div>
-            ))}
-          </div>
-        )}
+              ))}
+            </div>
+          )}
+        </>)}
       </div>
     </motion.div>
     </motion.div>
