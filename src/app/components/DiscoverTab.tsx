@@ -1,6 +1,6 @@
-import { useState, useMemo, useEffect, useCallback } from 'react';
+import { useState, useMemo, useEffect, useCallback, useRef } from 'react';
 import { motion, useMotionValue, useTransform, AnimatePresence } from 'motion/react';
-import { Navigation, Heart, X, Share2, ThumbsDown, MapPin, Star } from 'lucide-react';
+import { Navigation, Heart, X, Share2, ThumbsDown, MapPin, Star, Play } from 'lucide-react';
 import { ImageWithFallback } from './figma/ImageWithFallback';
 import { useSettings, setSettings, patchSubLocation, fetchReactions, recordReaction, type ReactionCounts, fetchSubReviews, submitSubReview, type SubReview, getVisitorName } from '../store';
 import type { SubLocation } from './data';
@@ -74,8 +74,8 @@ export function DiscoverTab({
   const top = stack[0];
 
   return (
-    <div className="flex flex-col" style={{ padding: '16px 32px 0' }}>
-      <div className="relative w-full" style={{ height: 460, overflow: 'visible' }}>
+    <div className="flex flex-col h-full" style={{ padding: '16px 32px 0' }}>
+      <div className="relative w-full flex-1 min-h-0" style={{ overflow: 'visible' }}>
         <AnimatePresence>
           {stack.length === 0 && (
             <div
@@ -108,7 +108,7 @@ export function DiscoverTab({
         </AnimatePresence>
       </div>
 
-      <div className="relative flex items-center justify-center gap-8 mt-6" style={{ zIndex: 50 }}>
+      <div className="relative flex items-center justify-center gap-8 mt-6" style={{ zIndex: 20 }}>
         {/* Không thích */}
         <button onClick={() => { if (top) { react(top.id, 'dislike'); handleDone('skip'); } }}
           className="flex flex-col items-center gap-1.5 active:scale-95 transition">
@@ -220,6 +220,7 @@ function SwipeCard({
   const rotate = useTransform(x, [-200, 200], [-12, 12]);
   const flagOpacity = useTransform(x, [0, 100], [0, 1]);
   const skipOpacity = useTransform(x, [-100, 0], [1, 0]);
+  const didDrag = useRef(false);
 
   const img = (sub.images?.[0] || sub.image) ?? '';
 
@@ -246,15 +247,15 @@ function SwipeCard({
           : depth === 1 ? '0 4px 16px rgba(0,0,0,0.08)'
           : '0 2px 8px rgba(0,0,0,0.05)',
       }}
+      onClick={() => { if (interactive && !didDrag.current) onTap?.(); didDrag.current = false; }}
+      onDragStart={() => { didDrag.current = true; }}
       onDragEnd={(_, info) => {
         const ox = info.offset.x, oy = info.offset.y;
         const vx = info.velocity.x, vy = info.velocity.y;
         const swipedRight = ox > 60 || vx > 400;
         const swipedLeft  = ox < -60 || vx < -400;
-        const tapped = Math.abs(ox) < 8 && Math.abs(oy) < 8;
-        if (swipedRight) onDone('flag');
-        else if (swipedLeft) onDone('skip');
-        else if (tapped) onTap?.();
+        if (swipedRight) { didDrag.current = false; onDone('flag'); }
+        else if (swipedLeft) { didDrag.current = false; onDone('skip'); }
       }}
       initial={{ opacity: 0, scale: 0.92 }}
       animate={{
@@ -276,11 +277,12 @@ function SwipeCard({
 
       {/* Card layout — address card style */}
       <div className="flex flex-col h-full px-5 pt-5 pb-4">
-        {/* Header label */}
+        {/* Header label — province · date on same line */}
         <div className="flex items-center gap-1.5 mb-3">
           <MapPin size={13} strokeWidth={2.5} style={{ color: 'var(--accent-500)', flexShrink: 0 }} />
           <span className="font-ui" style={{ fontSize: 10, fontWeight: 700, letterSpacing: '0.1em', color: 'var(--text-tertiary)' }}>
-            ĐỊA ĐIỂM · {sub.province.toUpperCase()}
+            {sub.province.toUpperCase()}
+            {sub.date !== '—' && ` · ${sub.date}`}
           </span>
         </div>
 
@@ -294,31 +296,14 @@ function SwipeCard({
           <QuoteText quote={sub.quote.replace(/"/g, '')} />
         )}
 
-        {/* Image 4:3, căn dưới */}
-        <div className="mt-auto pt-3" style={{ pointerEvents: 'none' }}>
-          <div className="relative overflow-hidden" style={{ aspectRatio: '4/3', borderRadius: 12 }}>
-            <ImageWithFallback src={img} alt={sub.name} className="w-full h-full object-cover" draggable={false} />
+        {/* Image — fill remaining height */}
+        {img && (
+          <div className="mt-auto pt-3 flex-1 min-h-0" style={{ pointerEvents: 'none' }}>
+            <div className="h-full rounded-xl overflow-hidden">
+              <ImageWithFallback src={img} alt={sub.name} className="w-full h-full object-cover" draggable={false} />
+            </div>
           </div>
-        </div>
-
-        {/* Meta row */}
-        <div className="flex items-center gap-2 mt-3">
-          {sub.date !== '—' && (
-            <span className="font-ui px-2.5 py-1 rounded-full" style={{ fontSize: 11, fontWeight: 600, background: 'var(--accent-100)', color: 'var(--accent-600)' }}>
-              {sub.date}
-            </span>
-          )}
-          {sub.km > 0 && (
-            <span className="font-ui px-2.5 py-1 rounded-full" style={{ fontSize: 11, fontWeight: 600, background: 'var(--bg-elevated)', color: 'var(--text-secondary)', border: '1px solid var(--border-subtle)' }}>
-              km {sub.km}
-            </span>
-          )}
-          {sub.rating && sub.rating > 0 && (
-            <span className="font-ui px-2.5 py-1 rounded-full" style={{ fontSize: 11, fontWeight: 600, background: 'var(--bg-elevated)', color: 'var(--text-secondary)', border: '1px solid var(--border-subtle)' }}>
-              ★ {sub.rating.toFixed(1)}
-            </span>
-          )}
-        </div>
+        )}
       </div>
     </motion.div>
   );
@@ -445,27 +430,31 @@ function DetailSheet({ sub, onClose, onReview }: {
 
   return (
     <motion.div
-      className="fixed inset-0 z-50 flex flex-col"
-      style={{ background: 'var(--bg-base)' }}
-      initial={{ x: '100%' }} animate={{ x: 0 }} exit={{ x: '100%' }}
+      className="fixed inset-0 z-50 flex justify-center"
+      initial={{ y: '100%' }} animate={{ y: 0 }} exit={{ y: '100%' }}
       transition={{ duration: 0.28, ease: [0, 0, 0.2, 1] }}
     >
-      {/* Header */}
-      <div className="flex items-center gap-3 px-4 pt-12 pb-4 shrink-0" style={{ borderBottom: '1px solid var(--border-subtle)' }}>
-        <button onClick={onClose} className="grid place-items-center rounded-full shrink-0"
-          style={{ width: 36, height: 36, background: 'var(--bg-surface)', border: '1px solid var(--border-subtle)' }}>
-          <X size={16} strokeWidth={2.5} />
-        </button>
-        <div className="flex-1 min-w-0">
-          <div className="font-ui truncate" style={{ fontSize: 11, color: 'var(--text-tertiary)' }}>
-            {sub.province}{sub.date !== '—' ? ` · ${sub.date}` : ''}
+      <div
+        className="relative w-full max-w-[480px] h-full overflow-y-auto no-scrollbar flex flex-col"
+        style={{ background: 'var(--bg-base)' }}
+      >
+        {/* Header */}
+        <div className="sticky top-0 z-10" style={{ background: 'var(--bg-base)' }}>
+          <div className="flex items-center gap-3 px-4 pt-12 pb-3" style={{ borderBottom: '1px solid var(--border-subtle)' }}>
+            <div className="flex-1 min-w-0">
+              <div className="font-ui" style={{ fontSize: 11, color: 'var(--text-tertiary)' }}>
+                {sub.province}{sub.date !== '—' ? ` · ${sub.date}` : ''}
+              </div>
+              <div className="font-display truncate" style={{ fontSize: 16, fontWeight: 700 }}>{sub.name}</div>
+            </div>
+            <button onClick={onClose} className="grid place-items-center rounded-full shrink-0"
+              style={{ width: 32, height: 32, background: 'var(--bg-surface)', border: '1px solid var(--border-subtle)' }}>
+              <X size={14} strokeWidth={2.5} />
+            </button>
           </div>
-          <div className="font-display truncate" style={{ fontSize: 16, fontWeight: 700 }}>{sub.name}</div>
         </div>
-      </div>
 
       {/* Scrollable content */}
-      <div className="flex-1 overflow-y-auto no-scrollbar">
         {/* Image */}
         {img && (
           <div className="relative" style={{ aspectRatio: '4/3' }}>
@@ -490,6 +479,38 @@ function DetailSheet({ sub, onClose, onReview }: {
             </p>
           )}
         </div>
+
+        {/* Video link box */}
+        {sub.videoUrl && (
+          <div className="px-5 pb-3">
+            <a href={sub.videoUrl} target="_blank" rel="noopener noreferrer"
+              className="flex items-center gap-3 p-3 transition active:scale-[0.98]"
+              style={{ background: 'var(--bg-surface)', border: '1px solid var(--border-subtle)', borderRadius: 16, textDecoration: 'none' }}>
+              {(() => {
+                const ytId = sub.videoUrl.match(/(?:v=|youtu\.be\/|shorts\/)([^&?/\s]+)/)?.[1];
+                return ytId ? (
+                  <div className="overflow-hidden shrink-0" style={{ width: 96, height: 64, borderRadius: 10 }}>
+                    <img src={`https://i.ytimg.com/vi/${ytId}/hqdefault.jpg`} alt="" className="w-full h-full object-cover" />
+                  </div>
+                ) : (
+                  <div className="grid place-items-center shrink-0" style={{ width: 64, height: 64, borderRadius: 10, background: 'var(--bg-elevated)', color: 'var(--accent-500)' }}>
+                    <Play size={24} fill="currentColor" strokeWidth={0} />
+                  </div>
+                );
+              })()}
+              <div className="flex-1 min-w-0">
+                <div className="font-ui" style={{ fontSize: 10, color: 'var(--text-tertiary)', fontWeight: 600, letterSpacing: '0.05em' }}>XEM VIDEO</div>
+                <div className="font-ui mt-0.5 line-clamp-3" style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-primary)', lineHeight: 1.4 }}>
+                  {sub.videoTitle || 'Xem video hành trình'}
+                </div>
+              </div>
+              <div className="grid place-items-center rounded-full shrink-0"
+                style={{ width: 32, height: 32, background: '#FF0000', color: '#fff' }}>
+                <Play size={12} fill="#fff" strokeWidth={0} />
+              </div>
+            </a>
+          </div>
+        )}
 
         {/* Review form (inline toggle) */}
         <div className="px-5 pb-4">

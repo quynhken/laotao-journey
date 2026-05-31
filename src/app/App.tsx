@@ -82,7 +82,7 @@ function MainApp() {
             >
               {tab === 'map' && <MapTab flagged={flagged} onFlag={handleFlag} onQuiz={(s) => setQuizStop(s)} />}
               {tab === 'discover' && (
-                <div className="overflow-y-auto no-scrollbar" style={{ height: 'calc(100dvh - 56px - 60px)' }}>
+                <div className="h-full flex flex-col overflow-hidden">
                   <DiscoverTab onAction={() => {}} onAddPoints={addPoints} />
                 </div>
               )}
@@ -147,10 +147,10 @@ function MainApp() {
               exit={{ opacity: 0, scale: 0.95, y: 12 }}
               transition={{ duration: 0.22, ease: [0, 0, 0.2, 1] }}
               onClick={(e) => e.stopPropagation()}
-              className="w-full overflow-y-auto no-scrollbar"
-              style={{ maxWidth: 420, maxHeight: '88dvh', background: 'var(--bg-warm)', borderRadius: 'var(--radius-xl)', boxShadow: '0 24px 64px rgba(0,0,0,0.22)' }}
+              className="w-full flex flex-col"
+              style={{ maxWidth: 420, height: '88dvh', background: 'var(--bg-warm)', borderRadius: 'var(--radius-xl)', boxShadow: '0 24px 64px rgba(0,0,0,0.22)', overflow: 'hidden' }}
             >
-              <div className="flex items-center justify-between px-5 pt-5 pb-1">
+              <div className="flex items-center justify-between px-5 pt-5 pb-1 shrink-0">
                 <span className="font-display" style={{ fontSize: 17, fontWeight: 700 }}>Khám Phá Địa Điểm</span>
                 <button
                   onClick={() => setDiscoverOpen(false)}
@@ -160,7 +160,9 @@ function MainApp() {
                   <X size={15} strokeWidth={2.5} />
                 </button>
               </div>
-              <DiscoverTab onAction={() => {}} onAddPoints={addPoints} />
+              <div className="flex-1 min-h-0 overflow-hidden">
+                <DiscoverTab onAction={() => {}} onAddPoints={addPoints} />
+              </div>
             </motion.div>
           </motion.div>
         )}
