@@ -723,4 +723,68 @@ app.post("/make-server-ae2dcaa6/reactions/:id/:type", async (c: any) => {
   }
 });
 
+// ── Backup ────────────────────────────────────────────────────────────────────
+const BACKUP_KEY = "lao-tao:backup";
+
+// POST /backup  — admin; snapshot current settings + visitors
+app.post("/make-server-ae2dcaa6/backup", async (c: any) => {
+  try {
+    const authErr = checkAdmin(c);
+    if (authErr) return authErr;
+    const settings = await kv.get(SETTINGS_KEY);
+    const visitors: any[] = (await kv.get(VISITORS_KEY)) ?? [];
+    const snapshot = {
+      createdAt: new Date().toISOString(),
+      settings: settings ?? {},
+      visitorCount: visitors.length,
+      visitors,
+    };
+    await kv.set(BACKUP_KEY, snapshot);
+    return c.json({
+      ok: true,
+      createdAt: snapshot.createdAt,
+      provinces: (settings?.provinces ?? []).length,
+      subLocations: (settings?.subLocations ?? []).length,
+      videos: (settings?.videos ?? []).length,
+      visitors: visitors.length,
+    });
+  } catch (err) {
+    return c.json({ error: String(err) }, 500);
+  }
+});
+
+// GET /backup  — admin; get latest snapshot info
+app.get("/make-server-ae2dcaa6/backup", async (c: any) => {
+  try {
+    const authErr = checkAdmin(c);
+    if (authErr) return authErr;
+    const snap = await kv.get(BACKUP_KEY);
+    if (!snap) return c.json({ backup: null });
+    return c.json({
+      createdAt: snap.createdAt,
+      provinces: (snap.settings?.provinces ?? []).length,
+      subLocations: (snap.settings?.subLocations ?? []).length,
+      videos: (snap.settings?.videos ?? []).length,
+      visitors: snap.visitorCount ?? 0,
+    });
+  } catch (err) {
+    return c.json({ error: String(err) }, 500);
+  }
+});
+
+// GET /backup/restore  — admin; restore settings from backup
+app.post("/make-server-ae2dcaa6/backup/restore", async (c: any) => {
+  try {
+    const authErr = checkAdmin(c);
+    if (authErr) return authErr;
+    const snap = await kv.get(BACKUP_KEY);
+    if (!snap) return c.json({ error: "No backup found" }, 404);
+    await kv.set(SETTINGS_KEY, snap.settings);
+    await kv.set(VISITORS_KEY, snap.visitors);
+    return c.json({ ok: true, restoredFrom: snap.createdAt });
+  } catch (err) {
+    return c.json({ error: String(err) }, 500);
+  }
+});
+
 Deno.serve(app.fetch);
