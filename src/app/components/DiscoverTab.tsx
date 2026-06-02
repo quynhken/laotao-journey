@@ -226,7 +226,7 @@ function SwipeCard({
 
   return (
     <motion.div
-      drag={interactive}
+      drag={interactive ? 'x' : false}
       dragElastic={0.08}
       dragMomentum={false}
       dragSnapToOrigin={false}
@@ -276,7 +276,7 @@ function SwipeCard({
       </motion.div>
 
       {/* Card layout — address card style */}
-      <div className="flex flex-col h-full px-5 pt-5 pb-4">
+      <div className="flex flex-col h-full px-5 pt-5 pb-1">
         {/* Header label — province · date on same line */}
         <div className="flex items-center gap-1.5 mb-3">
           <MapPin size={13} strokeWidth={2.5} style={{ color: 'var(--accent-500)', flexShrink: 0 }} />
@@ -298,8 +298,8 @@ function SwipeCard({
 
         {/* Image — fill remaining height */}
         {img && (
-          <div className="mt-auto pt-3 flex-1 min-h-0" style={{ pointerEvents: 'none' }}>
-            <div className="h-full rounded-xl overflow-hidden">
+          <div className="mt-auto flex-1 min-h-0 -mx-4 mb-1" style={{ pointerEvents: 'none', marginTop: 8 }}>
+            <div className="h-full overflow-hidden" style={{ borderRadius: 12 }}>
               <ImageWithFallback src={img} alt={sub.name} className="w-full h-full object-cover" draggable={false} />
             </div>
           </div>
