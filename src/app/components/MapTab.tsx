@@ -236,20 +236,21 @@ export function MapTab({ flagged, onFlag, onQuiz }: Props) {
         <NavigationControl position="top-right" style={{ marginTop: 110, marginRight: 12, borderRadius: 9999 }} />
 
         {/* Override "South China Sea" with Vietnamese name */}
-        <Marker longitude={115.5} latitude={14.5} anchor="center">
+        <Marker longitude={114.5} latitude={15.0} anchor="center">
           <div style={{
             background: '#C2C8CA',
             color: '#4a5a7a',
             fontFamily: "'Georgia', serif",
             fontStyle: 'italic',
-            fontSize: 14,
+            fontSize: 15,
             fontWeight: 400,
             letterSpacing: '0.02em',
-            lineHeight: 1.5,
+            lineHeight: 1.55,
             textAlign: 'center',
-            padding: '6px 16px',
+            padding: '14px 40px',
             pointerEvents: 'none',
             userSelect: 'none',
+            minWidth: 180,
           }}>
             Biển Đông<br />Việt Nam
           </div>
