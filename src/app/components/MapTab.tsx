@@ -217,9 +217,43 @@ export function MapTab({ flagged, onFlag, onQuiz }: Props) {
         mapStyle={MAP_STYLE}
         style={{ width: '100%', height: '100%' }}
         onClick={() => setSelected(null)}
-        onLoad={(e) => { mapGLRef.current = e.target; }}
+        onLoad={(e) => {
+          mapGLRef.current = e.target;
+          const map = e.target;
+          // Override all text labels to use English only, removing CJK characters
+          map.getStyle().layers.forEach((layer: any) => {
+            if (layer.type === 'symbol' && layer.layout?.['text-field']) {
+              map.setLayoutProperty(layer.id, 'text-field', [
+                'coalesce',
+                ['get', 'name:en'],
+                ['get', 'name:latin'],
+                ['get', 'name'],
+              ]);
+            }
+          });
+        }}
       >
         <NavigationControl position="top-right" style={{ marginTop: 110, marginRight: 12, borderRadius: 9999 }} />
+
+        {/* Override "South China Sea" with Vietnamese name */}
+        <Marker longitude={117.5} latitude={20.5} anchor="center">
+          <div style={{
+            background: '#C2C8CA',
+            color: '#4a5a7a',
+            fontFamily: "'Georgia', serif",
+            fontStyle: 'italic',
+            fontSize: 14,
+            fontWeight: 400,
+            letterSpacing: '0.02em',
+            lineHeight: 1.5,
+            textAlign: 'center',
+            padding: '6px 16px',
+            pointerEvents: 'none',
+            userSelect: 'none',
+          }}>
+            Biển Đông<br />Việt Nam
+          </div>
+        </Marker>
 
         {/* ── Level 1: Province markers ── */}
         {level === 'provinces' && PROVINCES.map(p => {
