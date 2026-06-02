@@ -236,7 +236,7 @@ export function MapTab({ flagged, onFlag, onQuiz }: Props) {
         <NavigationControl position="top-right" style={{ marginTop: 110, marginRight: 12, borderRadius: 9999 }} />
 
         {/* Override "South China Sea" with Vietnamese name */}
-        <Marker longitude={117.5} latitude={20.5} anchor="center">
+        <Marker longitude={113.5} latitude={10.5} anchor="center">
           <div style={{
             background: '#C2C8CA',
             color: '#4a5a7a',
