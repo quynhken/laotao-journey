@@ -292,7 +292,12 @@ app.patch("/make-server-ae2dcaa6/visitors/:id", async (c) => {
     const visitors: any[] = (await kv.get(VISITORS_KEY)) ?? [];
     const idx = visitors.findIndex((v: any) => v.id === id);
     if (idx === -1) return c.json({ error: "Not found" }, 404);
-    if (typeof body.points === "number") visitors[idx].points = body.points;
+    if (typeof body.points === "number") {
+      // Only allow setting points if it's a small increment over current value (max +500)
+      const current = visitors[idx].points ?? 0;
+      const newPoints = Math.max(current, Math.min(body.points, current + 500));
+      visitors[idx].points = newPoints;
+    }
     visitors[idx].lastSeen = new Date().toISOString();
     await kv.set(VISITORS_KEY, visitors);
     return c.json({ visitor: visitors[idx] });
@@ -481,8 +486,8 @@ app.patch("/make-server-ae2dcaa6/vi-point", async (c) => {
 app.post("/make-server-ae2dcaa6/vi-point/add", async (c) => {
   try {
     const body = await c.req.json();
-    const amount = Number(body.amount);
-    if (!amount || amount < 0) return c.json({ error: "amount must be a positive number" }, 400);
+    const amount = Math.min(Math.max(Number(body.amount), 0), 500); // cap 0–500
+    if (!amount) return c.json({ error: "amount must be 1–500" }, 400);
     const settings = await kv.get(SETTINGS_KEY);
     if (!settings) return c.json({ error: "Settings not found" }, 404);
     const prev = settings.viPoint ?? settings.initialPoints ?? 0;
