@@ -33,10 +33,10 @@ export function MapTab({ flagged, onFlag, onQuiz }: Props) {
   // Initial view: zoom to flagged (checked-in) province, fallback to currentStop, then Vietnam center
   const INIT_VIEW = useMemo(() => {
     const flaggedProv = PROVINCES.find(p => p.status === 'flagged');
-    if (flaggedProv) return { longitude: flaggedProv.lng, latitude: flaggedProv.lat, zoom: 5 };
+    if (flaggedProv) return { longitude: flaggedProv.lng, latitude: flaggedProv.lat, zoom: 7 };
     const stop = settings.header.currentStop;
     const prov = PROVINCES.find(p => p.name === stop);
-    return prov ? { longitude: prov.lng, latitude: prov.lat, zoom: 5 } : DEFAULT_VIEW;
+    return prov ? { longitude: prov.lng, latitude: prov.lat, zoom: 7 } : DEFAULT_VIEW;
   }, []); // eslint-disable-line react-hooks/exhaustive-deps — intentionally fixed on mount
   const PRIMARY = '#FF631F';
   const EPISODE_COLOR_MAP = new Proxy({} as Record<number, string>, { get: () => PRIMARY });
