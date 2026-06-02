@@ -795,7 +795,7 @@ function ProvincesSection({ draft, setDraft }: SP) {
                     const ns: SubLocation = {
                       id: nextId, provinceId: p.id, episode: p.episode, locNum: nextLoc,
                       name: 'Địa điểm mới', province: p.name, region: p.region,
-                      km: 0, date: '—', quote: '"..."',
+                      km: 0, date: '—', quote: 'Địa điểm mới', showQuiz: false,
                       image: p.image, status: 'locked', lat: p.lat, lng: p.lng,
                     };
                     return { ...prev, subLocations: [...prev.subLocations, ns] };
@@ -950,7 +950,7 @@ function ProvincesSection({ draft, setDraft }: SP) {
             id: nextId++, provinceId: prov.id, episode: prov.episode, locNum: nextLoc++,
             name: name || `Địa điểm ${nextLoc - 1}`,
             province: prov.name, region: prov.region,
-            km: 0, date: '—', quote: '"..."',
+            km: 0, date: '—', quote: name || 'Địa điểm mới', showQuiz: false,
             image: prov.image, status: 'locked' as const, lat, lng,
           }));
           setDraft({ ...draft, subLocations: [...draft.subLocations, ...newSubs] });
@@ -1065,7 +1065,7 @@ function SubLocationsSection({ draft, setDraft }: SP) {
       const ns: SubLocation = {
         id: nextId, provinceId: targetPid, episode: prov.episode, locNum: nextLoc,
         name: 'Địa điểm mới', province: prov.name, region: prov.region,
-        km: 0, date: '—', quote: '"..."',
+        km: 0, date: '—', quote: 'Địa điểm mới', showQuiz: false,
         image: prov.image, status: 'locked', lat: prov.lat, lng: prov.lng,
       };
       return { ...prev, subLocations: [...prev.subLocations, ns] };
@@ -1445,7 +1445,7 @@ function SubLocationCard({
         {/* Bottom info */}
         <div className="absolute inset-x-0 bottom-0 px-3 pb-3">
           <div className="font-ui mb-0.5" style={{ fontSize: 10, color: 'rgba(255,255,255,0.65)' }}>
-            #{displayNum} · {s.date !== '—' ? s.date : 'Chưa có ngày'}
+            #{displayNum}
           </div>
           <div className="font-display" style={{ fontSize: 15, color: '#fff', lineHeight: 1.2, fontWeight: 700 }}>
             {s.name}
@@ -1485,18 +1485,9 @@ function SubLocationCard({
 
             <div className="p-5 flex flex-col gap-3">
               {/* Row 1 */}
-              <div className="grid grid-cols-[1fr_110px_100px] gap-2">
+              <div className="grid grid-cols-[1fr_100px] gap-2">
                 <Field label="Tên địa điểm">
                   <TextInput value={s.name} onChange={(e) => onUpdate({ name: e.target.value })} />
-                </Field>
-                <Field label="Ngày">
-                  <div className="relative">
-                    <input type="date" value={s.date === '—' ? '' : s.date}
-                      onChange={(e) => onUpdate({ date: e.target.value || '—' })}
-                      className="h-10 w-full pl-3 pr-8 font-ui outline-none rounded"
-                      style={{ ...inputStyle, fontSize: 13 }} />
-                    <CalendarDays size={13} className="absolute right-2 top-1/2 -translate-y-1/2 pointer-events-none" style={{ color: B.inkMuted }} />
-                  </div>
                 </Field>
                 <Field label="Trạng thái">
                   <StatusButton status={s.status} onChange={(v) => onUpdate({ status: v })} />
