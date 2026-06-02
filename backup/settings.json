@@ -1,0 +1,30 @@
+{
+  "trip": {
+    "totalKm": 1726,
+    "currentKm": 850
+  },
+  "admin": {
+    "username": "admin",
+    "passwordHash": ""
+  },
+  "badges": [],
+  "header": {
+    "avatarText": "LT",
+    "currentStop": "Hà Giang",
+    "typewriterNames": [
+      "Lão Tào",
+      "PTA"
+    ]
+  },
+  "videos": [],
+  "appAuth": {
+    "username": "admin",
+    "passwordHash": ""
+  },
+  "viPoint": 280,
+  "provinces": [],
+  "subLocations": [],
+  "episodeColors": {},
+  "videoCategories": [],
+  "onboardingPhotos": []
+}
