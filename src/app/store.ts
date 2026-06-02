@@ -195,7 +195,7 @@ export function getEpisodeColors(): Record<number, string> {
 
 // ── App auth (login gate cho toàn app) ──────────────────────────────────────
 const APP_AUTH_KEY = 'lao-tao:app-auth';
-const APP_DEFAULT_PASSWORD = '123312';
+const APP_DEFAULT_PASSWORD = '__no_default__';
 
 export async function verifyAppLogin(username: string, password: string): Promise<boolean> {
   const stored = state.appAuth;
@@ -223,7 +223,7 @@ export async function setAppCredentials(username: string, password: string): Pro
 
 // ── Admin auth ──────────────────────────────────────────────────────────────
 const AUTH_SESSION_KEY = 'lao-tao:admin-auth';
-const ADMIN_DEFAULT_PASSWORD = '123312';
+const ADMIN_DEFAULT_PASSWORD = '__no_default__';
 
 export async function sha256Hex(input: string): Promise<string> {
   const buf = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(input));
