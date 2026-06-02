@@ -1,5 +1,12 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { ArrowLeft, Save, RotateCcw, Download, Upload, Plus, Trash2, Lock, LogOut, ChevronRight, ChevronDown, CalendarDays, GripVertical, ChevronUp, X, Play, ImageIcon } from 'lucide-react';
+import { ArrowLeft, Save, RotateCcw, Download, Upload, Plus, Trash2, Lock, LogOut, ChevronRight, ChevronDown, CalendarDays, GripVertical, ChevronUp, X, ImageIcon, Menu, Workflow } from 'lucide-react';
+import { Button } from './ui/button';
+import { Input } from './ui/input';
+import { Textarea } from './ui/textarea';
+import { Label } from './ui/label';
+import { Sheet, SheetContent, SheetTrigger } from './ui/sheet';
+import { Separator } from './ui/separator';
+import { cn } from './ui/utils';
 import {
   useSettings,
   setSettings,
@@ -38,6 +45,7 @@ import {
   type OnboardingPhoto,
 } from '../store';
 import type { Badge, Province, SubLocation } from './data';
+import { projectId, publicAnonKey } from '/utils/supabase/info';
 
 const PLACEHOLDER_IMG = "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='400' height='300' viewBox='0 0 400 300'%3E%3Crect width='400' height='300' fill='%23F3F4F6'/%3E%3Crect x='160' y='100' width='80' height='60' rx='6' fill='%23D1D5DB'/%3E%3Ccircle cx='230' cy='115' r='8' fill='%23E5E7EB'/%3E%3Cpolyline points='160,160 190,130 215,150 235,135 280,160' fill='%23D1D5DB' stroke='none'/%3E%3C/svg%3E";
 
@@ -216,61 +224,62 @@ function AdminPanel({ onLogout }: { onLogout: () => void }) {
               {sync.status === 'error' && '⚠ lỗi'}
             </span>
             {/* Pull — icon only on mobile */}
-            <button onClick={() => pullSettings()}
-              className="h-9 px-2 sm:px-3 inline-flex items-center gap-1"
-              style={{ background: B.canvas, color: B.ink, borderRadius: B.radiusPill, fontSize: 13 }}>
+            <Button variant="outline" size="sm" onClick={() => pullSettings()} className="gap-1 rounded-full">
               <RotateCcw size={13} /><span className="hidden sm:inline">Pull</span>
-            </button>
-            <button onClick={onLogout}
-              className="h-9 px-2 sm:px-3 inline-flex items-center gap-1"
-              style={{ background: B.canvas, color: B.ink, borderRadius: B.radiusPill, fontSize: 13 }}>
+            </Button>
+            <Button variant="outline" size="sm" onClick={onLogout} className="gap-1 rounded-full">
               <LogOut size={13} /><span className="hidden sm:inline">Thoát</span>
-            </button>
+            </Button>
             {dirty && (
-              <button onClick={discard}
-                className="h-9 px-2 sm:px-3 inline-flex items-center"
-                style={{ background: B.canvas, color: B.ink, borderRadius: B.radiusPill, fontSize: 13 }}>
+              <Button variant="outline" size="sm" onClick={discard} className="rounded-full">
                 <span className="hidden sm:inline">Huỷ</span><span className="sm:hidden">✕</span>
-              </button>
+              </Button>
             )}
-            <button
-              onClick={save} disabled={!dirty}
-              className="h-9 px-3 sm:px-5 inline-flex items-center gap-1.5"
-              style={{
-                background: dirty ? B.ink : B.canvas,
-                color: dirty ? B.canvasPure : B.inkSubtle,
-                borderRadius: B.radiusPill, fontSize: 13,
-                cursor: dirty ? 'pointer' : 'not-allowed',
-              }}
+            <Button
+              onClick={save} disabled={!dirty} size="sm"
+              variant={dirty ? 'default' : 'outline'}
+              className="gap-1.5 rounded-full"
             >
               <Save size={13} /><span className="hidden sm:inline">Lưu thay đổi</span><span className="sm:hidden">Lưu</span>
-            </button>
+            </Button>
           </div>
         </header>
       </div>
 
       <div className="max-w-[1240px] mx-auto flex flex-col md:flex-row px-3 md:px-5 pt-4 md:pt-6 pb-10 gap-4 md:gap-6">
-        {/* Sidebar — vertical on md+, horizontal scroll on mobile */}
-        <aside className="w-full md:w-52 md:shrink-0 md:self-start md:sticky" style={{ top: 88 }}>
-          <nav className="flex md:flex-col gap-1 p-2 overflow-x-auto no-scrollbar"
-            style={{ background: B.canvasPure, borderRadius: B.radiusLg }}>
+        {/* Mobile: Sheet sidebar */}
+        <div className="md:hidden sticky top-20 z-20 px-0 mb-2">
+          <Sheet>
+            <SheetTrigger asChild>
+              <Button variant="outline" size="sm" className="gap-2">
+                <Menu size={15} /> Menu
+              </Button>
+            </SheetTrigger>
+            <SheetContent side="left" className="w-64 pt-12">
+              <nav className="flex flex-col gap-1 p-2">
+                {SECTIONS.map((s) => {
+                  const active = section === s.key;
+                  return (
+                    <Button key={s.key} variant={active ? 'default' : 'ghost'} size="sm"
+                      className="justify-start font-normal" onClick={() => setSection(s.key)}>
+                      {s.label}
+                    </Button>
+                  );
+                })}
+              </nav>
+            </SheetContent>
+          </Sheet>
+        </div>
+        {/* Desktop: sticky sidebar */}
+        <aside className="hidden md:block w-52 shrink-0 self-start sticky" style={{ top: 88 }}>
+          <nav className="flex flex-col gap-1 p-2 bg-white rounded-xl shadow-sm">
             {SECTIONS.map((s) => {
               const active = section === s.key;
               return (
-                <button
-                  key={s.key}
-                  onClick={() => setSection(s.key)}
-                  className="shrink-0 text-left px-4 h-10"
-                  style={{
-                    background: active ? B.ink : 'transparent',
-                    color: active ? B.canvasPure : B.inkMuted,
-                    borderRadius: B.radiusPill,
-                    fontSize: 14,
-                    whiteSpace: 'nowrap',
-                  }}
-                >
+                <Button key={s.key} variant={active ? 'default' : 'ghost'} size="sm"
+                  className="justify-start font-normal" onClick={() => setSection(s.key)}>
                   {s.label}
-                </button>
+                </Button>
               );
             })}
           </nav>
@@ -309,12 +318,10 @@ function PillBtn({ children, icon, onClick }: { children: React.ReactNode; icon?
 
 function Field({ label, children }: { label: string; children: React.ReactNode }) {
   return (
-    <label className="block mb-3">
-      <div className="mb-1.5" style={{ fontSize: 12, color: B.inkMuted, letterSpacing: '0.02em' }}>
-        {label}
-      </div>
+    <div className="flex flex-col gap-1.5 mb-3">
+      <Label className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">{label}</Label>
       {children}
-    </label>
+    </div>
   );
 }
 
@@ -325,14 +332,14 @@ const inputStyle: React.CSSProperties = {
   color: B.ink,
 };
 
-function TextInput(props: React.InputHTMLAttributes<HTMLInputElement>) {
-  return <input {...props} className="w-full h-10 px-4 outline-none" style={{ ...inputStyle, fontSize: 14, ...(props.style || {}) }} />;
+function TextInput({ style, ...props }: React.InputHTMLAttributes<HTMLInputElement>) {
+  return <Input {...props} className={cn('h-10 font-ui text-sm', props.className)} style={style} />;
 }
 function NumInput(props: React.InputHTMLAttributes<HTMLInputElement>) {
   return <input type="number" {...props} className="w-full h-10 px-4 outline-none" style={{ ...inputStyle, fontSize: 14, ...(props.style || {}) }} />;
 }
-function TextArea(props: React.TextareaHTMLAttributes<HTMLTextAreaElement>) {
-  return <textarea {...props} className="w-full px-4 py-2.5 outline-none" style={{ ...inputStyle, fontSize: 14, minHeight: 72, ...(props.style || {}) }} />;
+function TextArea({ style, ...props }: React.TextareaHTMLAttributes<HTMLTextAreaElement>) {
+  return <Textarea {...props} className={cn('font-ui text-sm resize-none', props.className)} style={style} />;
 }
 
 function Card({ children }: { children: React.ReactNode }) {
@@ -344,9 +351,9 @@ function Card({ children }: { children: React.ReactNode }) {
 }
 function SectionTitle({ children, hint }: { children: React.ReactNode; hint?: string }) {
   return (
-    <div className="mb-6">
-      <h2 className="font-display" style={{ fontSize: 40, lineHeight: 1.1, color: B.ink, letterSpacing: '-0.01em' }}>{children}</h2>
-      {hint && <div className="mt-2" style={{ fontSize: 14, color: B.inkMuted }}>{hint}</div>}
+    <div className="mb-5">
+      <h2 className="text-lg font-bold tracking-tight">{children}</h2>
+      {hint && <p className="text-sm text-muted-foreground mt-0.5">{hint}</p>}
     </div>
   );
 }
