@@ -1199,6 +1199,131 @@ function SubLocationsSection({ draft, setDraft }: SP) {
   );
 }
 
+function AutoImageSearch({ locationName, onSelect }: { locationName: string; onSelect: (url: string) => void }) {
+  const [query, setQuery] = useState(locationName);
+  const [results, setResults] = useState<string[]>([]);
+  const [loading, setLoading] = useState(false);
+  const [err, setErr] = useState('');
+
+  // Parse Google Maps URL to extract place name
+  const parseGmapsUrl = (input: string): string => {
+    try {
+      const url = new URL(input);
+      // /maps/place/PlaceName/ format
+      const placeMatch = url.pathname.match(/\/maps\/place\/([^/]+)/);
+      if (placeMatch) return decodeURIComponent(placeMatch[1].replace(/\+/g, ' '));
+      // ?q= param
+      const q = url.searchParams.get('q');
+      if (q) return q;
+    } catch {}
+    return input;
+  };
+
+  const search = async () => {
+    const q = parseGmapsUrl(query.trim());
+    if (!q) return;
+    setLoading(true); setErr(''); setResults([]);
+    try {
+      // Wikimedia Commons search
+      const res = await fetch(
+        `https://en.wikipedia.org/w/api.php?action=query&titles=${encodeURIComponent(q)}&prop=pageimages&format=json&pithumbsize=400&pilimit=8&origin=*`
+      );
+      const data = await res.json();
+      const pages = Object.values(data.query?.pages ?? {}) as any[];
+      const imgs: string[] = pages.flatMap(p =>
+        p.thumbnail?.source ? [p.thumbnail.source.replace(/\/\d+px-/, '/400px-')] : []
+      );
+      // Also search Commons
+      const res2 = await fetch(
+        `https://commons.wikimedia.org/w/api.php?action=query&list=search&srsearch=${encodeURIComponent(q)}&srnamespace=6&format=json&srlimit=8&origin=*`
+      );
+      const data2 = await res2.json();
+      const commonsImgs: string[] = (data2.query?.search ?? []).map((r: any) => {
+        const title = r.title.replace('File:', '');
+        return `https://commons.wikimedia.org/wiki/Special:FilePath/${encodeURIComponent(title)}?width=400`;
+      });
+      const all = [...imgs, ...commonsImgs].slice(0, 9);
+      if (all.length === 0) setErr('Không tìm thấy ảnh. Thử tên khác.');
+      else setResults(all);
+    } catch {
+      setErr('Lỗi tìm kiếm. Kiểm tra kết nối.');
+    }
+    setLoading(false);
+  };
+
+  const [pasteUrl, setPasteUrl] = useState('');
+  const [pastePreview, setPastePreview] = useState('');
+
+  const handlePaste = (url: string) => {
+    setPasteUrl(url);
+    // Show preview if it looks like an image URL
+    if (url.match(/\.(jpg|jpeg|png|webp|gif)/i) || url.includes('googleusercontent') || url.includes('ggpht') || url.includes('maps.google')) {
+      setPastePreview(url);
+    } else {
+      setPastePreview(url); // try anyway
+    }
+  };
+
+  return (
+    <div className="rounded-xl p-3 mb-1" style={{ background: B.canvas, border: `1px solid ${B.hairline}` }}>
+      <div className="font-ui mb-2" style={{ fontSize: 12, fontWeight: 700, color: B.inkMuted }}>🔍 Tự động lấy ảnh</div>
+
+      {/* Google Images shortcut */}
+      <div className="flex gap-2 mb-3">
+        <a href={`https://www.google.com/search?q=${encodeURIComponent(query + ' Việt Nam')}&tbm=isch`}
+          target="_blank" rel="noopener noreferrer"
+          className="flex-1 h-9 rounded-full font-ui inline-flex items-center justify-center gap-1.5"
+          style={{ background: '#4285F4', color: '#fff', fontSize: 12, fontWeight: 700, textDecoration: 'none' }}>
+          🖼 Google Images
+        </a>
+        <a href={`https://www.google.com/maps/search/${encodeURIComponent(query)}`}
+          target="_blank" rel="noopener noreferrer"
+          className="flex-1 h-9 rounded-full font-ui inline-flex items-center justify-center gap-1.5"
+          style={{ background: '#34A853', color: '#fff', fontSize: 12, fontWeight: 700, textDecoration: 'none' }}>
+          📍 Google Maps
+        </a>
+      </div>
+
+      {/* Paste URL from Google */}
+      <div className="mb-3">
+        <div className="font-ui mb-1" style={{ fontSize: 11, color: B.inkMuted }}>Paste link ảnh từ Google:</div>
+        <div className="flex gap-2">
+          <TextInput placeholder="https://..." value={pasteUrl} onChange={e => handlePaste(e.target.value)} style={{ flex: 1, fontSize: 11 }} />
+          <button onClick={async () => {
+            if (!pasteUrl) return;
+            try {
+              // Fetch image and upload to Supabase Storage
+              const res = await fetch(pasteUrl);
+              const blob = await res.blob();
+              const reader = new FileReader();
+              const base64 = await new Promise<string>(r => { reader.onload = e => r(e.target!.result as string); reader.readAsDataURL(blob); });
+              const serverUrl = await uploadImage(base64, `auto-${Date.now()}.jpg`);
+              onSelect(serverUrl);
+              setPasteUrl(''); setPastePreview('');
+            } catch {
+              // Fallback: use original URL if fetch fails (CORS)
+              onSelect(pasteUrl);
+              setPasteUrl(''); setPastePreview('');
+            }
+          }}
+            disabled={!pasteUrl}
+            className="h-10 px-3 rounded-full font-ui shrink-0"
+            style={{ background: B.orange, color: '#fff', fontSize: 12, fontWeight: 700, opacity: pasteUrl ? 1 : 0.4 }}>
+            Upload & Dùng
+          </button>
+        </div>
+        {pastePreview && (
+          <div className="mt-2 rounded-lg overflow-hidden" style={{ aspectRatio: '16/9', maxWidth: 200 }}>
+            <img src={pastePreview} alt="preview" className="w-full h-full object-cover"
+              onError={() => setPastePreview('')} />
+          </div>
+        )}
+      </div>
+
+    </div>
+  );
+}
+
 function compressForUpload(file: File, maxPx = 1200, quality = 0.88): Promise<string> {
   return new Promise((resolve) => {
     const reader = new FileReader();
@@ -1431,6 +1556,13 @@ function SubLocationCard({
               <Field label="Quote hiển thị trên Card">
                 <TextArea value={s.quote} onChange={(e) => onUpdate({ quote: e.target.value })} />
               </Field>
+
+              {/* Auto-fetch image from location name */}
+              <AutoImageSearch locationName={s.name} onSelect={(url) => {
+                const next = [...(s.images ?? []).filter(Boolean)];
+                if (!next.includes(url)) next.unshift(url);
+                onUpdate({ images: next.slice(0, 5), image: url });
+              }} />
 
               {/* Images — upload to server */}
               <div>
