@@ -290,6 +290,19 @@ export function MapTab({ flagged, onFlag, onQuiz }: Props) {
                 }}>
                   {SUB_LOCATIONS.filter(s => s.provinceId === p.id).length}
                 </span>
+                {/* Name label only for island provinces */}
+                {(p.name === 'Hoàng Sa' || p.name === 'Trường Sa') && (
+                  <span style={{
+                    position: 'absolute', top: 44, left: '50%', transform: 'translateX(-50%)',
+                    whiteSpace: 'nowrap', fontFamily: "'Be Vietnam Pro', sans-serif",
+                    fontSize: 10, fontWeight: 700, color: '#fff',
+                    background: 'rgba(0,0,0,0.55)', backdropFilter: 'blur(4px)',
+                    padding: '2px 6px', borderRadius: 6, lineHeight: 1.4,
+                    pointerEvents: 'none', zIndex: 4,
+                  }}>
+                    {p.name}
+                  </span>
+                )}
               </button>
             </Marker>
           );
