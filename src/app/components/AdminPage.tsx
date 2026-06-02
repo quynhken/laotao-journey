@@ -91,6 +91,7 @@ function LoginGate({ onSuccess }: { onSuccess: () => void }) {
   const submit = async (e: React.FormEvent) => {
     e.preventDefault();
     setBusy(true); setErr('');
+    await pullSettings(); // fetch latest password hash from server before verifying
     const ok = await verifyAdminLogin(user, pw);
     setBusy(false);
     if (ok) { setAuthed(true, pw); onSuccess(); }
