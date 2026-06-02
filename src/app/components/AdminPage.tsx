@@ -1204,6 +1204,8 @@ function AutoImageSearch({ locationName, onSelect }: { locationName: string; onS
   const [results, setResults] = useState<string[]>([]);
   const [loading, setLoading] = useState(false);
   const [err, setErr] = useState('');
+  const [urlQueue, setUrlQueue] = useState<string[]>([]);
+  const [uploading, setUploading] = useState(false);
 
   // Parse Google Maps URL to extract place name
   const parseGmapsUrl = (input: string): string => {
@@ -1289,36 +1291,65 @@ function AutoImageSearch({ locationName, onSelect }: { locationName: string; onS
         <div className="font-ui mb-1" style={{ fontSize: 11, color: B.inkMuted }}>Paste link ảnh từ Google:</div>
         <div className="flex gap-2">
           <TextInput placeholder="https://..." value={pasteUrl} onChange={e => handlePaste(e.target.value)} style={{ flex: 1, fontSize: 11 }} />
-          <button onClick={async () => {
-            if (!pasteUrl) return;
-            try {
-              // Fetch image and upload to Supabase Storage
-              const res = await fetch(pasteUrl);
-              const blob = await res.blob();
-              const reader = new FileReader();
-              const base64 = await new Promise<string>(r => { reader.onload = e => r(e.target!.result as string); reader.readAsDataURL(blob); });
-              const serverUrl = await uploadImage(base64, `auto-${Date.now()}.jpg`);
-              onSelect(serverUrl);
-              setPasteUrl(''); setPastePreview('');
-            } catch {
-              // Fallback: use original URL if fetch fails (CORS)
-              onSelect(pasteUrl);
-              setPasteUrl(''); setPastePreview('');
-            }
+          <button onClick={() => {
+            if (!pasteUrl || urlQueue.includes(pasteUrl)) return;
+            setUrlQueue(prev => [...prev, pasteUrl]);
+            setPasteUrl(''); setPastePreview('');
           }}
             disabled={!pasteUrl}
             className="h-10 px-3 rounded-full font-ui shrink-0"
-            style={{ background: B.orange, color: '#fff', fontSize: 12, fontWeight: 700, opacity: pasteUrl ? 1 : 0.4 }}>
-            Upload & Dùng
+            style={{ background: B.inkMuted, color: '#fff', fontSize: 12, fontWeight: 700, opacity: pasteUrl ? 1 : 0.4 }}>
+            + Thêm
           </button>
         </div>
         {pastePreview && (
-          <div className="mt-2 rounded-lg overflow-hidden" style={{ aspectRatio: '16/9', maxWidth: 200 }}>
+          <div className="mt-2 rounded-lg overflow-hidden" style={{ aspectRatio: '16/9', maxWidth: 160 }}>
             <img src={pastePreview} alt="preview" className="w-full h-full object-cover"
               onError={() => setPastePreview('')} />
           </div>
         )}
       </div>
+
+      {/* Queue preview */}
+      {urlQueue.length > 0 && (
+        <div className="mb-2">
+          <div className="grid grid-cols-3 gap-1.5 mb-2">
+            {urlQueue.map((url, i) => (
+              <div key={i} className="relative" style={{ aspectRatio: '4/3' }}>
+                <div className="absolute inset-0 rounded-lg overflow-hidden" style={{ background: B.canvas }}>
+                  <img src={url} alt="" className="w-full h-full object-cover" />
+                </div>
+                <div
+                  onClick={(e) => { e.stopPropagation(); e.preventDefault(); setUrlQueue(prev => prev.filter((_, j) => j !== i)); }}
+                  className="absolute top-1 right-1 w-7 h-7 rounded-full grid place-items-center cursor-pointer"
+                  style={{ background: '#FF3B30', color: '#fff', fontSize: 14, fontWeight: 800, zIndex: 100, userSelect: 'none' }}>
+                  ✕
+                </div>
+              </div>
+            ))}
+          </div>
+          <button onClick={async () => {
+            setUploading(true);
+            for (const url of urlQueue) {
+              try {
+                const res = await fetch(url);
+                const blob = await res.blob();
+                const reader = new FileReader();
+                const base64 = await new Promise<string>(r => { reader.onload = e => r(e.target!.result as string); reader.readAsDataURL(blob); });
+                const serverUrl = await uploadImage(base64, `auto-${Date.now()}.jpg`);
+                onSelect(serverUrl);
+              } catch { onSelect(url); }
+            }
+            setUrlQueue([]);
+            setUploading(false);
+          }}
+            disabled={uploading}
+            className="w-full h-10 rounded-full font-ui"
+            style={{ background: B.orange, color: '#fff', fontSize: 13, fontWeight: 700, opacity: uploading ? 0.6 : 1 }}>
+            {uploading ? 'Đang upload...' : `Upload & Dùng ${urlQueue.length} ảnh`}
+          </button>
+        </div>
+      )}
 
     </div>
   );
@@ -1612,20 +1643,6 @@ function SubLocationCard({
                               }
                             }} />
                         </label>
-                        {/* Remove button */}
-                        {url && (
-                          <button
-                            onClick={() => {
-                              const next = [...imgs];
-                              next[idx] = '';
-                              const cleaned = next.filter(Boolean);
-                              onUpdate({ images: cleaned, image: cleaned[0] || provImg });
-                            }}
-                            className="absolute top-0.5 right-0.5 w-5 h-5 rounded-full grid place-items-center opacity-0 group-hover:opacity-100 transition-opacity"
-                            style={{ background: 'rgba(0,0,0,0.55)', color: '#fff' }}>
-                            <X size={10} strokeWidth={2.5} />
-                          </button>
-                        )}
                         {/* Upload overlay on hover (when has image) */}
                         {url && !isUploading && (
                           <label className="absolute inset-0 grid place-items-center opacity-0 group-hover:opacity-100 transition-opacity cursor-pointer rounded-lg"
@@ -1651,6 +1668,21 @@ function SubLocationCard({
                                 }
                               }} />
                           </label>
+                        )}
+                        {/* Remove button — after overlay so it's on top */}
+                        {url && (
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              const next = [...imgs];
+                              next[idx] = '';
+                              const cleaned = next.filter(Boolean);
+                              onUpdate({ images: cleaned, image: cleaned[0] || provImg });
+                            }}
+                            className="absolute top-1 right-1 w-6 h-6 rounded-full grid place-items-center"
+                            style={{ background: '#FF3B30', color: '#fff', zIndex: 10 }}>
+                            <X size={11} strokeWidth={2.5} />
+                          </button>
                         )}
                       </div>
                     );
