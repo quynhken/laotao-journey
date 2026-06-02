@@ -62,9 +62,10 @@ const B = {
   radiusPill: 100,
 };
 
-type Section = 'header' | 'trip' | 'badges' | 'provinces' | 'sublocations' | 'videos' | 'categories' | 'visitors' | 'onboarding-photos' | 'security';
+type Section = 'monitor' | 'header' | 'trip' | 'badges' | 'provinces' | 'sublocations' | 'videos' | 'categories' | 'visitors' | 'onboarding-photos' | 'security';
 
 const SECTIONS: { key: Section; label: string }[] = [
+  { key: 'monitor', label: '🟢 Monitor' },
   { key: 'header', label: 'Header' },
   { key: 'trip', label: 'Hành Trình' },
   { key: 'badges', label: 'Huy Hiệu' },
@@ -283,6 +284,7 @@ function AdminPanel({ onLogout }: { onLogout: () => void }) {
           {section === 'sublocations' && <SubLocationsSection draft={draft} setDraft={setDraft} />}
           {section === 'videos' && <VideosSection draft={draft} setDraft={setDraft} />}
           {section === 'categories' && <CategoriesSection draft={draft} setDraft={setDraft} />}
+          {section === 'monitor' && <MonitorSection />}
           {section === 'visitors' && <VisitorsSection />}
           {section === 'onboarding-photos' && <OnboardingPhotosSection />}
           {section === 'security' && <SecuritySection />}
@@ -1968,6 +1970,156 @@ function CategoriesSection({ draft, setDraft }: SP) {
           ))}
         </div>
       )}
+    </>
+  );
+}
+
+// ── Monitor Section ─────────────────────────────────────────────────────────
+
+type HealthStatus = 'ok' | 'error' | 'loading';
+
+function MonitorSection() {
+  const settings = useSettings();
+  const [health, setHealth] = useState<HealthStatus>('loading');
+  const [responseMs, setResponseMs] = useState<number | null>(null);
+  const [visitors, setVisitors] = useState<Visitor[]>([]);
+  const [backupInfo, setBackupInfo] = useState<any>(null);
+  const [loading, setLoading] = useState(true);
+  const [lastChecked, setLastChecked] = useState<Date | null>(null);
+
+  const check = async () => {
+    setLoading(true);
+    setHealth('loading');
+
+    // Health check
+    const t0 = Date.now();
+    try {
+      const r = await fetch('https://cxpjsnklwnsmykphuslw.supabase.co/functions/v1/make-server-ae2dcaa6/health');
+      setResponseMs(Date.now() - t0);
+      setHealth(r.ok ? 'ok' : 'error');
+    } catch {
+      setResponseMs(Date.now() - t0);
+      setHealth('error');
+    }
+
+    // Visitors
+    fetchVisitors().then(v => setVisitors(v));
+
+    // Backup info
+    const tok = (() => { try { return sessionStorage.getItem('lao-tao:admin-token') ?? ''; } catch { return ''; } })();
+    fetch(`https://cxpjsnklwnsmykphuslw.supabase.co/functions/v1/make-server-ae2dcaa6/backup?adminToken=${encodeURIComponent(tok)}`)
+      .then(r => r.json()).then(setBackupInfo).catch(() => {});
+
+    setLastChecked(new Date());
+    setLoading(false);
+  };
+
+  useEffect(() => { check(); }, []);
+
+  const s = settings;
+  const totalGem = visitors.reduce((sum, v) => sum + (v.points ?? 0), 0);
+  const anomalies = visitors.filter(v => (v.points ?? 0) > 5000);
+  const fmtDate = (iso: string) => { try { const d = new Date(iso); return `${d.getDate()}/${d.getMonth()+1} ${d.getHours()}:${String(d.getMinutes()).padStart(2,'0')}`; } catch { return iso; } };
+
+  const Stat = ({ label, value, sub, color }: { label: string; value: string | number; sub?: string; color?: string }) => (
+    <div className="rounded-xl p-3" style={{ background: B.canvasPure, border: `1px solid ${B.hairline}` }}>
+      <div className="font-ui" style={{ fontSize: 10, color: B.inkMuted, letterSpacing: '0.04em' }}>{label}</div>
+      <div className="font-display mt-1" style={{ fontSize: 22, fontWeight: 800, color: color ?? B.ink, lineHeight: 1 }}>{value}</div>
+      {sub && <div className="font-ui mt-0.5" style={{ fontSize: 10, color: B.inkSubtle }}>{sub}</div>}
+    </div>
+  );
+
+  return (
+    <>
+      <SectionTitle hint="Trạng thái hệ thống realtime — API, dữ liệu, người dùng, backup.">
+        🟢 Monitor
+      </SectionTitle>
+
+      {/* Refresh button */}
+      <div className="flex items-center gap-2 mb-4">
+        <button onClick={check} disabled={loading}
+          className="h-9 px-4 rounded-full font-ui inline-flex items-center gap-1.5"
+          style={{ background: B.orange, color: '#fff', fontSize: 13, fontWeight: 700, opacity: loading ? 0.6 : 1 }}>
+          <RotateCcw size={13} className={loading ? 'animate-spin' : ''} /> {loading ? 'Đang kiểm tra...' : 'Làm mới'}
+        </button>
+        {lastChecked && (
+          <span className="font-ui" style={{ fontSize: 11, color: B.inkMuted }}>
+            Cập nhật lúc {lastChecked.getHours()}:{String(lastChecked.getMinutes()).padStart(2,'0')}:{String(lastChecked.getSeconds()).padStart(2,'0')}
+          </span>
+        )}
+      </div>
+
+      {/* API Health */}
+      <div className="rounded-xl p-4 mb-4 flex items-center gap-3"
+        style={{ background: health === 'ok' ? '#EBF5EE' : health === 'error' ? '#FFE9DA' : B.canvas, border: `1px solid ${health === 'ok' ? '#2D6A3F' : health === 'error' ? B.orange : B.hairline}` }}>
+        <div style={{ width: 10, height: 10, borderRadius: '50%', background: health === 'ok' ? '#2D6A3F' : health === 'error' ? B.orange : B.inkSubtle, animation: health === 'loading' ? 'pulseDot 1s infinite' : 'none' }} />
+        <div className="flex-1">
+          <div className="font-ui" style={{ fontSize: 13, fontWeight: 700, color: health === 'ok' ? '#2D6A3F' : health === 'error' ? B.orange : B.inkMuted }}>
+            {health === 'ok' ? '✅ API Hoạt động bình thường' : health === 'error' ? '🔴 API đang có vấn đề' : '⏳ Đang kiểm tra...'}
+          </div>
+          {responseMs !== null && <div className="font-ui" style={{ fontSize: 11, color: B.inkMuted }}>Response time: {responseMs}ms</div>}
+        </div>
+      </div>
+
+      {/* Data stats */}
+      <div className="font-ui mb-2" style={{ fontSize: 11, fontWeight: 700, color: B.inkMuted, letterSpacing: '0.05em' }}>DỮ LIỆU</div>
+      <div className="grid grid-cols-3 gap-2 mb-4">
+        <Stat label="Tỉnh Thành" value={(s.provinces ?? []).length} />
+        <Stat label="Địa Điểm" value={(s.subLocations ?? []).length} />
+        <Stat label="Videos" value={(s.videos ?? []).length} />
+        <Stat label="Người Dùng" value={visitors.length} />
+        <Stat label="Tổng Gem" value={totalGem.toLocaleString()} color={B.orange} />
+        <Stat label="Ảnh Onboarding" value={(s.onboardingPhotos ?? []).length} />
+      </div>
+
+      {/* Backup */}
+      <div className="font-ui mb-2" style={{ fontSize: 11, fontWeight: 700, color: B.inkMuted, letterSpacing: '0.05em' }}>BACKUP</div>
+      <div className="rounded-xl p-4 mb-4" style={{ background: B.canvasPure, border: `1px solid ${B.hairline}` }}>
+        {backupInfo?.createdAt ? (
+          <div className="flex items-center justify-between">
+            <div>
+              <div className="font-ui" style={{ fontSize: 13, fontWeight: 700 }}>Backup gần nhất</div>
+              <div className="font-ui" style={{ fontSize: 11, color: B.inkMuted }}>{fmtDate(backupInfo.createdAt)} · {backupInfo.provinces} tỉnh · {backupInfo.subLocations} địa điểm · {backupInfo.visitors} users</div>
+            </div>
+            <div className="px-2 py-1 rounded-full font-ui" style={{ background: '#EBF5EE', color: '#2D6A3F', fontSize: 11, fontWeight: 700 }}>✓ OK</div>
+          </div>
+        ) : (
+          <div className="font-ui" style={{ fontSize: 13, color: B.inkMuted }}>Chưa có backup nào.</div>
+        )}
+      </div>
+
+      {/* Gem anomalies */}
+      {anomalies.length > 0 && (
+        <>
+          <div className="font-ui mb-2" style={{ fontSize: 11, fontWeight: 700, color: B.orange, letterSpacing: '0.05em' }}>⚠️ GEM BẤT THƯỜNG</div>
+          <div className="rounded-xl overflow-hidden mb-4" style={{ border: `1px solid ${B.orange}44` }}>
+            {anomalies.slice(0, 5).map(v => (
+              <div key={v.id} className="flex items-center justify-between px-4 py-2.5"
+                style={{ borderBottom: `1px solid ${B.hairline}`, background: '#FFF8F5' }}>
+                <span className="font-ui" style={{ fontSize: 13, fontWeight: 600 }}>{v.name}</span>
+                <span className="font-ui" style={{ fontSize: 13, fontWeight: 800, color: B.orange }}>{(v.points ?? 0).toLocaleString()} gem</span>
+              </div>
+            ))}
+          </div>
+        </>
+      )}
+
+      {/* Recent signups */}
+      <div className="font-ui mb-2" style={{ fontSize: 11, fontWeight: 700, color: B.inkMuted, letterSpacing: '0.05em' }}>NGƯỜI DÙNG MỚI</div>
+      <div className="rounded-xl overflow-hidden" style={{ border: `1px solid ${B.hairline}` }}>
+        {visitors.slice(0, 5).map((v, i) => (
+          <div key={v.id} className="flex items-center justify-between px-4 py-2.5"
+            style={{ borderTop: i > 0 ? `1px solid ${B.hairline}` : 'none', background: B.canvasPure }}>
+            <div>
+              <span className="font-ui" style={{ fontSize: 13, fontWeight: 600 }}>{v.name}</span>
+              <span className="font-ui ml-2" style={{ fontSize: 11, color: B.inkMuted }}>{v.device ?? ''}{v.os ? ` · ${v.os}` : ''}</span>
+            </div>
+            <span className="font-ui" style={{ fontSize: 11, color: B.inkMuted }}>
+              {fmtDate(v.lastSeen ?? v.joinedAt)}
+            </span>
+          </div>
+        ))}
+      </div>
     </>
   );
 }
