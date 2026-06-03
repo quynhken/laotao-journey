@@ -65,6 +65,7 @@ export type AppSettings = {
     username: string;
     /** SHA-256 hex. Rỗng = mặc định "123312". */
     passwordHash: string;
+    twoFactor?: { enabled: boolean; email: string };
   };
   appAuth: {
     username: string;

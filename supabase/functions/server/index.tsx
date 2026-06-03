@@ -787,4 +787,148 @@ app.post("/make-server-ae2dcaa6/backup/restore", async (c: any) => {
   }
 });
 
+// ── Admin 2FA / Login Attempts ───────────────────────────────────────────────
+const OTP_KEY = "lao-tao:admin-otp";
+const ATTEMPTS_KEY = "lao-tao:login-attempts";
+const MAX_ATTEMPTS = 5;
+const LOCKOUT_MS = 30 * 60 * 1000;
+const OTP_EXPIRY_MS = 5 * 60 * 1000;
+
+async function sha256Hex(text: string): Promise<string> {
+  const buf = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(text));
+  return Array.from(new Uint8Array(buf)).map((b) => b.toString(16).padStart(2, "0")).join("");
+}
+
+async function sendOTPEmail(toEmail: string, otp: string): Promise<void> {
+  const apiKey = Deno.env.get("RESEND_API_KEY");
+  if (!apiKey) throw new Error("RESEND_API_KEY chưa được cấu hình trong Supabase secrets");
+  const res = await fetch("https://api.resend.com/emails", {
+    method: "POST",
+    headers: { "Authorization": `Bearer ${apiKey}`, "Content-Type": "application/json" },
+    body: JSON.stringify({
+      from: "Lão Tào Admin <onboarding@resend.dev>",
+      to: [toEmail],
+      subject: `[laotao.blog] Mã OTP đăng nhập: ${otp}`,
+      html: `<div style="font-family:sans-serif;max-width:400px;margin:0 auto"><h2 style="color:#FF631F">🔐 Xác thực Admin</h2><p>Mã OTP của bạn:</p><div style="font-size:36px;font-weight:bold;letter-spacing:10px;padding:20px;background:#FAF9F7;border-radius:12px;text-align:center">${otp}</div><p style="color:#727272;font-size:13px">Hết hạn sau 5 phút. Không chia sẻ mã này.</p></div>`,
+    }),
+  });
+  if (!res.ok) throw new Error(`Resend error ${res.status}: ${await res.text()}`);
+}
+
+async function sendLockoutAlert(adminEmail: string): Promise<void> {
+  const apiKey = Deno.env.get("RESEND_API_KEY");
+  if (!apiKey) return;
+  await fetch("https://api.resend.com/emails", {
+    method: "POST",
+    headers: { "Authorization": `Bearer ${apiKey}`, "Content-Type": "application/json" },
+    body: JSON.stringify({
+      from: "Lão Tào Admin <onboarding@resend.dev>",
+      to: [adminEmail],
+      subject: `🔴 [laotao.blog] Cảnh báo: Tài khoản admin bị khóa`,
+      html: `<div style="font-family:sans-serif"><h2 style="color:#FF3B30">⚠️ Cảnh báo bảo mật</h2><p>Có ai đó đã thử đăng nhập sai <strong>${MAX_ATTEMPTS} lần</strong> vào trang admin laotao.blog.</p><p>Tài khoản đã bị khóa <strong>30 phút</strong> tự động.</p><p style="color:#727272;font-size:13px">Thời gian: ${new Date().toISOString()}</p></div>`,
+    }),
+  });
+}
+
+// POST /admin/otp/send — verify password, track attempts, send OTP if 2FA enabled
+app.post("/make-server-ae2dcaa6/admin/otp/send", async (c: any) => {
+  try {
+    const attempts = (await kv.get(ATTEMPTS_KEY)) ?? { count: 0, lockUntil: null };
+    if (attempts.lockUntil && new Date(attempts.lockUntil) > new Date()) {
+      return c.json({ ok: false, locked: true, lockUntil: attempts.lockUntil }, 429);
+    }
+
+    const body = await c.req.json();
+    const { username, password } = body;
+    const settings = await kv.get(SETTINGS_KEY);
+    const adminUsername = (settings?.admin?.username ?? settings?.appAuth?.username ?? "admin").trim().toLowerCase();
+    const adminHash = settings?.admin?.passwordHash ?? settings?.appAuth?.passwordHash ?? "";
+
+    let passwordOk = false;
+    if (!adminHash) {
+      passwordOk = password === "__no_default__";
+    } else {
+      passwordOk = (await sha256Hex(password)) === adminHash;
+    }
+    const usernameOk = (username ?? "").trim().toLowerCase() === adminUsername;
+
+    if (!passwordOk || !usernameOk) {
+      const newCount = (attempts.count ?? 0) + 1;
+      const attemptsLeft = Math.max(0, MAX_ATTEMPTS - newCount);
+      let lockUntil = null;
+      if (newCount >= MAX_ATTEMPTS) {
+        lockUntil = new Date(Date.now() + LOCKOUT_MS).toISOString();
+        const alertEmail = settings?.admin?.twoFactor?.email ?? "quynhkencv@gmail.com";
+        sendLockoutAlert(alertEmail).catch(() => {});
+      }
+      await kv.set(ATTEMPTS_KEY, { count: newCount, lockUntil });
+      return c.json({ ok: false, locked: !!lockUntil, lockUntil, attemptsLeft }, 401);
+    }
+
+    // Password correct — reset attempts
+    await kv.set(ATTEMPTS_KEY, { count: 0, lockUntil: null });
+
+    const twoFactorCfg = settings?.admin?.twoFactor;
+    if (!twoFactorCfg?.enabled) {
+      return c.json({ ok: true, twoFactor: false });
+    }
+
+    // Generate OTP
+    const otp = String(Math.floor(100000 + Math.random() * 900000));
+    await kv.set(OTP_KEY, { code: otp, expiresAt: new Date(Date.now() + OTP_EXPIRY_MS).toISOString() });
+
+    const maskedEmail = twoFactorCfg.email.replace(/^(.{2}).+(@.+)$/, "$1***$2");
+    await sendOTPEmail(twoFactorCfg.email, otp);
+    return c.json({ ok: true, twoFactor: true, email: maskedEmail });
+  } catch (err) {
+    console.log(`OTP send error: ${err}`);
+    return c.json({ error: String(err) }, 500);
+  }
+});
+
+// POST /admin/otp/verify — verify OTP code
+app.post("/make-server-ae2dcaa6/admin/otp/verify", async (c: any) => {
+  try {
+    const { otp } = await c.req.json();
+    const stored = await kv.get(OTP_KEY);
+    if (!stored?.code) return c.json({ ok: false, error: "Chưa có OTP, hãy đăng nhập lại." }, 400);
+    if (new Date(stored.expiresAt) < new Date()) {
+      await kv.set(OTP_KEY, {});
+      return c.json({ ok: false, error: "OTP đã hết hạn (5 phút), hãy đăng nhập lại." }, 400);
+    }
+    if (String(otp).trim() !== stored.code) {
+      return c.json({ ok: false, error: "Mã OTP không đúng." }, 401);
+    }
+    await kv.set(OTP_KEY, {});
+    return c.json({ ok: true });
+  } catch (err) {
+    return c.json({ error: String(err) }, 500);
+  }
+});
+
+// GET /admin/login-attempts — admin; get lockout status
+app.get("/make-server-ae2dcaa6/admin/login-attempts", async (c: any) => {
+  try {
+    const authErr = checkAdmin(c);
+    if (authErr) return authErr;
+    const attempts = (await kv.get(ATTEMPTS_KEY)) ?? { count: 0, lockUntil: null };
+    const locked = !!attempts.lockUntil && new Date(attempts.lockUntil) > new Date();
+    return c.json({ ...attempts, locked });
+  } catch (err) {
+    return c.json({ error: String(err) }, 500);
+  }
+});
+
+// DELETE /admin/login-attempts — admin; reset lockout
+app.delete("/make-server-ae2dcaa6/admin/login-attempts", async (c: any) => {
+  try {
+    const authErr = checkAdmin(c);
+    if (authErr) return authErr;
+    await kv.set(ATTEMPTS_KEY, { count: 0, lockUntil: null });
+    return c.json({ ok: true });
+  } catch (err) {
+    return c.json({ error: String(err) }, 500);
+  }
+});
+
 Deno.serve(app.fetch);

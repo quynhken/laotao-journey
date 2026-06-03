@@ -92,59 +92,155 @@ export function AdminPage() {
   return <AdminPanel onLogout={() => { setAuthed(false); setAuthedState(false); }} />;
 }
 
+const LOGIN_API = `https://${projectId}.supabase.co/functions/v1/make-server-ae2dcaa6`;
+
 function LoginGate({ onSuccess }: { onSuccess: () => void }) {
+  const [step, setStep] = useState<'password' | 'otp'>('password');
   const [user, setUser] = useState('');
   const [pw, setPw] = useState('');
+  const [otp, setOtp] = useState('');
   const [err, setErr] = useState('');
   const [busy, setBusy] = useState(false);
-  const submit = async (e: React.FormEvent) => {
+  const [attemptsLeft, setAttemptsLeft] = useState<number | null>(null);
+  const [lockUntil, setLockUntil] = useState<string | null>(null);
+  const [lockSecs, setLockSecs] = useState(0);
+  const [sentTo, setSentTo] = useState('');
+
+  useEffect(() => {
+    if (!lockUntil) return;
+    const tick = () => {
+      const diff = Math.max(0, Math.ceil((new Date(lockUntil).getTime() - Date.now()) / 1000));
+      setLockSecs(diff);
+      if (diff === 0) setLockUntil(null);
+    };
+    tick();
+    const id = setInterval(tick, 1000);
+    return () => clearInterval(id);
+  }, [lockUntil]);
+
+  const isLocked = !!lockUntil && lockSecs > 0;
+
+  const submitPassword = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (isLocked) return;
+    setBusy(true); setErr('');
+    try {
+      const res = await fetch(`${LOGIN_API}/admin/otp/send`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ username: user, password: pw }),
+      });
+      const data = await res.json();
+      if (data.locked) {
+        setLockUntil(data.lockUntil);
+        setErr('Tài khoản bị khóa 30 phút. Admin đã nhận cảnh báo.');
+      } else if (!data.ok) {
+        const left = data.attemptsLeft ?? null;
+        setAttemptsLeft(left);
+        setErr(left !== null && left > 0
+          ? `Sai thông tin. Còn ${left} lần thử trước khi bị khóa.`
+          : 'Sai thông tin đăng nhập.');
+      } else if (data.twoFactor) {
+        setSentTo(data.email ?? '');
+        setStep('otp');
+      } else {
+        setAuthed(true, pw); onSuccess();
+      }
+    } catch {
+      // Fallback to client-side verify if server unreachable
+      await pullSettings();
+      const ok = await verifyAdminLogin(user, pw);
+      if (ok) { setAuthed(true, pw); onSuccess(); }
+      else setErr('Sai thông tin đăng nhập.');
+    }
+    setBusy(false);
+  };
+
+  const submitOTP = async (e: React.FormEvent) => {
     e.preventDefault();
     setBusy(true); setErr('');
-    await pullSettings(); // fetch latest password hash from server before verifying
-    const ok = await verifyAdminLogin(user, pw);
+    try {
+      const res = await fetch(`${LOGIN_API}/admin/otp/verify`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ otp }),
+      });
+      const data = await res.json();
+      if (data.ok) { setAuthed(true, pw); onSuccess(); }
+      else setErr(data.error ?? 'Mã OTP không đúng.');
+    } catch {
+      setErr('Lỗi kết nối. Thử lại.');
+    }
     setBusy(false);
-    if (ok) { setAuthed(true, pw); onSuccess(); }
-    else setErr('Sai tên đăng nhập hoặc mật khẩu.');
   };
+
+  const inputCls = "w-full h-11 px-4 font-ui outline-none";
+  const inputStyle = { background: B.canvas, border: `1px solid ${B.hairline}`, borderRadius: B.radiusMd, fontSize: 14, color: B.ink };
+
   return (
     <div className="min-h-dvh w-full grid place-items-center px-5"
       style={{ background: `linear-gradient(180deg, #B4D8E8 0%, #FAE8D0 50%, #FAEABF 100%)`, color: B.ink }}>
-      <form onSubmit={submit} className="w-full max-w-sm p-8"
-        style={{ background: B.canvasPure, borderRadius: B.radiusXl }}>
+      <div className="w-full max-w-sm p-8" style={{ background: B.canvasPure, borderRadius: B.radiusXl }}>
         <div className="inline-flex items-center gap-2 mb-5" style={{ color: B.orange }}>
           <Lock size={16} />
           <span style={{ fontSize: 13, letterSpacing: '0.05em', textTransform: 'uppercase' }}>Admin</span>
         </div>
         <div className="font-display mb-4" style={{ fontSize: 32, lineHeight: 1.1, color: B.ink }}>
-          Đăng nhập
+          {step === 'password' ? 'Đăng nhập' : 'Xác thực OTP'}
         </div>
-        <input
-          autoFocus
-          value={user}
-          onChange={(e) => setUser(e.target.value)}
-          placeholder="Tên đăng nhập"
-          autoCapitalize="none" autoCorrect="off"
-          className="w-full h-11 px-4 font-ui outline-none mb-3"
-          style={{ background: B.canvas, border: `1px solid ${B.hairline}`, borderRadius: B.radiusMd, fontSize: 14, color: B.ink }}
-        />
-        <input
-          type="password"
-          value={pw}
-          onChange={(e) => setPw(e.target.value)}
-          placeholder="Mật khẩu"
-          className="w-full h-11 px-4 font-ui outline-none mb-3"
-          style={{ background: B.canvas, border: `1px solid ${B.hairline}`, borderRadius: B.radiusMd, fontSize: 14, color: B.ink }}
-        />
-        {err && <div className="mb-3" style={{ fontSize: 13, color: B.orange }}>{err}</div>}
-        <button type="submit" disabled={busy || !user || !pw}
-          className="w-full h-11 font-ui transition"
-          style={{ background: B.ink, color: B.canvasPure, borderRadius: B.radiusPill, fontSize: 14, opacity: busy ? 0.6 : 1 }}>
-          {busy ? '...' : 'Vào'}
-        </button>
-        <div className="mt-4" style={{ fontSize: 12, color: B.inkMuted }}>
-          Đổi mật khẩu trong tab Bảo Mật sau khi đăng nhập.
-        </div>
-      </form>
+
+        {step === 'password' ? (
+          <form onSubmit={submitPassword} className="flex flex-col gap-3">
+            <input autoFocus value={user} onChange={(e) => setUser(e.target.value)}
+              placeholder="Tên đăng nhập" autoCapitalize="none" autoCorrect="off"
+              className={inputCls} style={inputStyle} />
+            <input type="password" value={pw} onChange={(e) => setPw(e.target.value)}
+              placeholder="Mật khẩu" className={inputCls} style={inputStyle} />
+            {isLocked && (
+              <div className="rounded-xl p-3 text-center" style={{ background: '#FFF1F0', border: '1px solid #FFD0CC' }}>
+                <div style={{ fontSize: 13, color: '#D93025', fontWeight: 700 }}>🔒 Tài khoản bị khóa</div>
+                <div style={{ fontSize: 12, color: '#D93025', marginTop: 4 }}>
+                  Mở khóa sau {Math.floor(lockSecs / 60)}:{String(lockSecs % 60).padStart(2, '0')}
+                </div>
+              </div>
+            )}
+            {!isLocked && err && (
+              <div className="rounded-xl p-3" style={{ background: '#FFF8F0', border: `1px solid ${B.hairline}` }}>
+                <div style={{ fontSize: 13, color: B.orange }}>{err}</div>
+                {attemptsLeft !== null && attemptsLeft <= 2 && (
+                  <div style={{ fontSize: 11, color: B.inkMuted, marginTop: 4 }}>
+                    ⚠️ Còn {attemptsLeft} lần — sau đó tài khoản bị khóa 30 phút.
+                  </div>
+                )}
+              </div>
+            )}
+            <button type="submit" disabled={busy || !user || !pw || isLocked}
+              className="w-full h-11 font-ui transition"
+              style={{ background: B.ink, color: B.canvasPure, borderRadius: B.radiusPill, fontSize: 14, opacity: (busy || isLocked) ? 0.5 : 1 }}>
+              {busy ? '...' : 'Tiếp tục'}
+            </button>
+          </form>
+        ) : (
+          <form onSubmit={submitOTP} className="flex flex-col gap-3">
+            <div style={{ fontSize: 13, color: B.inkMuted }}>
+              Mã OTP đã gửi đến <strong>{sentTo}</strong>. Có hiệu lực 5 phút.
+            </div>
+            <input autoFocus value={otp} onChange={(e) => setOtp(e.target.value.replace(/\D/g, '').slice(0, 6))}
+              placeholder="Nhập mã 6 số" inputMode="numeric" maxLength={6}
+              className={inputCls + ' tracking-[0.5em] text-center text-xl font-bold'} style={inputStyle} />
+            {err && <div style={{ fontSize: 13, color: B.orange }}>{err}</div>}
+            <button type="submit" disabled={busy || otp.length !== 6}
+              className="w-full h-11 font-ui transition"
+              style={{ background: B.ink, color: B.canvasPure, borderRadius: B.radiusPill, fontSize: 14, opacity: (busy || otp.length !== 6) ? 0.5 : 1 }}>
+              {busy ? '...' : 'Xác nhận'}
+            </button>
+            <button type="button" onClick={() => { setStep('password'); setOtp(''); setErr(''); }}
+              style={{ fontSize: 12, color: B.inkMuted, textAlign: 'center', background: 'none', border: 'none', cursor: 'pointer' }}>
+              ← Quay lại
+            </button>
+          </form>
+        )}
+      </div>
     </div>
   );
 }
@@ -2527,6 +2623,47 @@ function SecuritySection() {
   const [newPw2, setNewPw2] = useState('');
   const [msg, setMsg] = useState<{ kind: 'ok' | 'err'; text: string } | null>(null);
 
+  // 2FA state
+  const [twoFaEnabled, setTwoFaEnabled] = useState(settings.admin?.twoFactor?.enabled ?? false);
+  const [twoFaEmail, setTwoFaEmail] = useState(settings.admin?.twoFactor?.email ?? 'quynhkencv@gmail.com');
+  const [twoFaMsg, setTwoFaMsg] = useState<{ kind: 'ok' | 'err'; text: string } | null>(null);
+  const [twoFaBusy, setTwoFaBusy] = useState(false);
+
+  // Login attempts state
+  const [attempts, setAttempts] = useState<{ count: number; lockUntil: string | null; locked: boolean } | null>(null);
+  const [attBusy, setAttBusy] = useState(false);
+
+  useEffect(() => {
+    fetchAttempts();
+  }, []);
+
+  const fetchAttempts = async () => {
+    try {
+      const tok = sessionStorage.getItem('lao-tao:admin-token') ?? '';
+      const res = await fetch(`${LOGIN_API}/admin/login-attempts?adminToken=${encodeURIComponent(tok)}`);
+      if (res.ok) setAttempts(await res.json());
+    } catch {}
+  };
+
+  const resetAttempts = async () => {
+    setAttBusy(true);
+    try {
+      const tok = sessionStorage.getItem('lao-tao:admin-token') ?? '';
+      await fetch(`${LOGIN_API}/admin/login-attempts?adminToken=${encodeURIComponent(tok)}`, { method: 'DELETE' });
+      await fetchAttempts();
+    } finally { setAttBusy(false); }
+  };
+
+  const saveTwoFa = async () => {
+    setTwoFaBusy(true); setTwoFaMsg(null);
+    const updated = { ...settings, admin: { ...settings.admin, twoFactor: { enabled: twoFaEnabled, email: twoFaEmail.trim() } } };
+    setSettings(updated);
+    await pushSettings(updated);
+    setTwoFaBusy(false);
+    setTwoFaMsg({ kind: 'ok', text: `Đã ${twoFaEnabled ? 'bật' : 'tắt'} xác thực 2 lớp.` });
+    setTimeout(() => setTwoFaMsg(null), 3000);
+  };
+
   const submit = async (e: React.FormEvent) => {
     e.preventDefault();
     setMsg(null);
@@ -2543,10 +2680,13 @@ function SecuritySection() {
 
   return (
     <>
-      <SectionTitle hint="Đổi tên đăng nhập và mật khẩu cho trang /admin. Mặc định: admin / 123312.">
+      <SectionTitle hint="Bảo mật trang /admin.">
         Bảo Mật
       </SectionTitle>
+
+      {/* Đổi thông tin đăng nhập */}
       <Card>
+        <div className="font-ui mb-1" style={{ fontSize: 13, fontWeight: 700, color: B.ink }}>Đổi đăng nhập</div>
         <div className="font-ui mb-3" style={{ fontSize: 12, color: B.inkMuted }}>
           Xác thực thông tin hiện tại trước khi đổi.
         </div>
@@ -2557,7 +2697,7 @@ function SecuritySection() {
               <TextInput value={curUser} onChange={e => setCurUser(e.target.value)} placeholder="admin" autoCapitalize="none" />
             </Field>
             <Field label="Mật khẩu hiện tại">
-              <TextInput type="password" value={curPw} onChange={e => setCurPw(e.target.value)} placeholder="123312" />
+              <TextInput type="password" value={curPw} onChange={e => setCurPw(e.target.value)} placeholder="••••••" />
             </Field>
           </div>
           <div className="rounded-lg p-3 flex flex-col gap-2" style={{ background: B.canvas }}>
@@ -2582,9 +2722,108 @@ function SecuritySection() {
           <button type="submit" disabled={!curUser || !curPw || !newUser}
             className="h-10 px-4 rounded-full font-ui self-start inline-flex items-center gap-1.5"
             style={{ background: B.ink, color: B.canvasPure, fontSize: 13, fontWeight: 700, opacity: (!curUser||!curPw||!newUser)?0.5:1 }}>
-            <Save size={14} /> Cập nhật đăng nhập
+            <Save size={14} /> Cập nhật
           </button>
         </form>
+      </Card>
+
+      {/* Xác thực 2 lớp */}
+      <Card>
+        <div className="flex items-center justify-between mb-3">
+          <div>
+            <div className="font-ui" style={{ fontSize: 13, fontWeight: 700, color: B.ink }}>Xác thực 2 lớp (OTP)</div>
+            <div className="font-ui" style={{ fontSize: 12, color: B.inkMuted }}>Sau khi nhập mật khẩu, gửi mã 6 số qua Email để xác nhận</div>
+          </div>
+          <button
+            onClick={() => setTwoFaEnabled(v => !v)}
+            className="shrink-0 transition-colors"
+            style={{
+              width: 44, height: 24, borderRadius: 12, padding: 2,
+              background: twoFaEnabled ? B.orange : B.hairline,
+              border: 'none', cursor: 'pointer', position: 'relative',
+            }}
+          >
+            <span style={{
+              display: 'block', width: 20, height: 20, borderRadius: '50%', background: '#fff',
+              transform: twoFaEnabled ? 'translateX(20px)' : 'translateX(0)',
+              transition: 'transform 0.2s',
+            }} />
+          </button>
+        </div>
+        {twoFaEnabled && (
+          <div className="mb-3">
+            <Field label="Email nhận OTP">
+              <TextInput
+                type="email"
+                value={twoFaEmail}
+                onChange={e => setTwoFaEmail(e.target.value)}
+                placeholder="quynhkencv@gmail.com"
+              />
+            </Field>
+            <div className="mt-2 p-3 rounded-lg" style={{ background: '#FFF8F0', border: `1px solid ${B.hairline}` }}>
+              <div style={{ fontSize: 11, color: B.inkMuted }}>
+                ⚠️ Cần cấu hình <strong>RESEND_API_KEY</strong> trong Supabase Edge Functions secrets để gửi email OTP.
+              </div>
+            </div>
+          </div>
+        )}
+        {twoFaMsg && (
+          <div className="mb-2 font-ui" style={{ fontSize: 12, color: twoFaMsg.kind === 'ok' ? '#16a34a' : B.orange }}>
+            {twoFaMsg.text}
+          </div>
+        )}
+        <button onClick={saveTwoFa} disabled={twoFaBusy}
+          className="h-9 px-4 rounded-full font-ui inline-flex items-center gap-1.5"
+          style={{ background: B.ink, color: B.canvasPure, fontSize: 13, fontWeight: 700, opacity: twoFaBusy ? 0.5 : 1 }}>
+          <Save size={13} /> Lưu cài đặt
+        </button>
+      </Card>
+
+      {/* Lịch sử đăng nhập thất bại */}
+      <Card>
+        <div className="font-ui mb-1" style={{ fontSize: 13, fontWeight: 700, color: B.ink }}>Theo dõi đăng nhập</div>
+        <div className="font-ui mb-3" style={{ fontSize: 12, color: B.inkMuted }}>
+          Hệ thống khóa 30 phút sau 5 lần nhập sai. Admin nhận email cảnh báo ngay khi bị khóa.
+        </div>
+        {attempts ? (
+          <div className="rounded-lg p-3 flex flex-col gap-2" style={{ background: B.canvas }}>
+            <div className="flex items-center gap-3">
+              <div className="flex-1">
+                <div style={{ fontSize: 12, color: B.inkMuted }}>Lần thử sai gần đây</div>
+                <div style={{ fontSize: 20, fontWeight: 700, color: attempts.locked ? '#D93025' : B.ink }}>
+                  {attempts.count ?? 0} / {5}
+                </div>
+              </div>
+              <div className="flex-1">
+                <div style={{ fontSize: 12, color: B.inkMuted }}>Trạng thái</div>
+                <div style={{ fontSize: 14, fontWeight: 700, color: attempts.locked ? '#D93025' : '#16a34a' }}>
+                  {attempts.locked ? '🔒 Đang khóa' : '✅ Bình thường'}
+                </div>
+              </div>
+            </div>
+            {attempts.locked && attempts.lockUntil && (
+              <div style={{ fontSize: 11, color: '#D93025' }}>
+                Mở khóa lúc: {new Date(attempts.lockUntil).toLocaleString('vi-VN')}
+              </div>
+            )}
+          </div>
+        ) : (
+          <div style={{ fontSize: 12, color: B.inkMuted }}>Đang tải...</div>
+        )}
+        <div className="flex gap-2 mt-3">
+          <button onClick={fetchAttempts}
+            className="h-9 px-3 rounded-full font-ui inline-flex items-center gap-1"
+            style={{ background: B.canvas, color: B.ink, fontSize: 12, border: `1px solid ${B.hairline}` }}>
+            Làm mới
+          </button>
+          {attempts?.locked && (
+            <button onClick={resetAttempts} disabled={attBusy}
+              className="h-9 px-3 rounded-full font-ui inline-flex items-center gap-1"
+              style={{ background: '#FFF1F0', color: '#D93025', fontSize: 12, border: '1px solid #FFD0CC', opacity: attBusy ? 0.5 : 1 }}>
+              Mở khóa ngay
+            </button>
+          )}
+        </div>
       </Card>
     </>
   );
