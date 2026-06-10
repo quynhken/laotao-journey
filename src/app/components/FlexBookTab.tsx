@@ -1,6 +1,6 @@
 import {
   Compass, Film, Flag, Sparkles, BookOpen, Star, Layers, PenLine,
-  Map, Gem, Award, type LucideIcon,
+  Map, Gem, Award, ChevronRight, type LucideIcon,
 } from 'lucide-react';
 import { STOPS, BADGES, REGION_COLOR, REGION_LABEL, type Region } from './data';
 import { useSettings } from '../store';
@@ -27,76 +27,86 @@ export function FlexBookTab({ flagged, points }: { flagged: Set<number>; points:
   return (
     <div className="px-4 py-4 space-y-5">
       {/* Passport Cover */}
+      <a href="https://www.youtube.com/@laotaovlog" target="_blank" rel="noopener noreferrer" style={{ textDecoration: 'none', display: 'block' }}>
       <div className="relative overflow-hidden" style={{
-        background: 'linear-gradient(150deg, #FF7A3C 0%, #FF4F00 55%, #C93A00 100%)',
+        background: 'linear-gradient(160deg, #FEF6E8 0%, #FDF0D5 100%)',
         borderRadius: 'var(--radius-xl)',
-        padding: '18px 20px 16px',
-        boxShadow: '0 8px 32px rgba(201,58,0,0.4), inset 0 1px 0 rgba(255,255,255,0.15)',
-      }}>
-        {/* Shimmer sweep */}
+        padding: '14px 16px',
+        boxShadow: '0 2px 12px rgba(180,100,20,0.10), inset 0 1px 0 rgba(255,255,255,0.9)',
+        border: '1px solid #F0D8A8',
+        cursor: 'pointer',
+        transition: 'box-shadow 0.15s, transform 0.15s',
+      }}
+        onMouseEnter={e => { (e.currentTarget as HTMLDivElement).style.boxShadow = '0 4px 20px rgba(180,100,20,0.18)'; (e.currentTarget as HTMLDivElement).style.transform = 'translateY(-1px)'; }}
+        onMouseLeave={e => { (e.currentTarget as HTMLDivElement).style.boxShadow = '0 2px 12px rgba(180,100,20,0.10)'; (e.currentTarget as HTMLDivElement).style.transform = ''; }}
+      >
+        {/* Subtle texture overlay */}
         <div style={{
-          position: 'absolute', top: 0, left: 0, width: '40%', height: '100%',
-          background: 'linear-gradient(90deg, transparent, rgba(255,255,255,0.12), transparent)',
-          animation: 'shimmer 3s ease-in-out infinite',
+          position: 'absolute', top: 0, left: 0, right: 0, bottom: 0,
+          backgroundImage: 'radial-gradient(circle at 80% 20%, rgba(255,160,50,0.06) 0%, transparent 60%)',
           pointerEvents: 'none',
         }} />
 
         {/* Corner dots */}
-        {['top-2.5 left-2.5','top-2.5 right-2.5','bottom-2.5 left-2.5','bottom-2.5 right-2.5'].map(pos => (
-          <div key={pos} className={`absolute ${pos} w-1.5 h-1.5 rounded-full`} style={{ background: 'rgba(255,255,255,0.5)' }} />
+        {['top-2 left-2','top-2 right-2','bottom-2 left-2','bottom-2 right-2'].map(pos => (
+          <div key={pos} className={`absolute ${pos} w-1.5 h-1.5 rounded-full`} style={{ background: '#E8C070', opacity: 0.6 }} />
         ))}
 
-        {/* Header row */}
-        <div className="font-ui" style={{ fontSize: 8.5, letterSpacing: '0.15em', color: 'rgba(255,255,255,0.65)' }}>
-          CỘNG HOÀ XÃ HỘI CHỦ NGHĨA VIỆT NAM
+        {/* Top label */}
+        <div className="font-ui mb-2.5" style={{ fontSize: 7.5, letterSpacing: '0.2em', color: '#C4873A' }}>
+          HỘ CHIẾU HÀNH TRÌNH · LAOTAO.BLOG
         </div>
-        <div className="flex items-center justify-between mt-1.5">
-          <h1 className="font-display" style={{ fontSize: 26, fontWeight: 900, letterSpacing: '0.02em', color: '#fff', textShadow: '0 1px 6px rgba(0,0,0,0.25)' }}>
-            HỘ CHIẾU SỐ
-          </h1>
-          <div className="flex items-center justify-center" style={{
-            width: 40, height: 40, borderRadius: '50%',
-            border: '1.5px solid rgba(255,255,255,0.5)',
-            background: 'rgba(255,255,255,0.12)',
-            animation: 'starPulse 2.5s ease-in-out infinite',
+
+        {/* Avatar + Info row */}
+        <div className="flex items-center gap-3">
+          {/* Avatar circle */}
+          <div style={{
+            width: 56, height: 56, borderRadius: '50%', flexShrink: 0,
+            border: '2.5px solid #F0C870',
+            boxShadow: '0 2px 8px rgba(200,130,30,0.25)',
+            overflow: 'hidden', background: '#FFE4A0',
           }}>
-            <span style={{ fontSize: 20, color: '#fff' }}>★</span>
+            {settings.header?.avatarText ? (
+              <img src={settings.header.avatarText} alt="Lão Tào" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+            ) : (
+              <div style={{ width: '100%', height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 28 }}>🧭</div>
+            )}
           </div>
-        </div>
-        <div className="font-body italic" style={{ color: 'rgba(255,255,255,0.72)', fontSize: 12, marginTop: 2 }}>
-          Sổ tay hành trình của bạn đồng hành cùng Lão Tào
+
+          {/* Name + subtitle */}
+          <div className="flex-1 min-w-0">
+            <div className="font-display" style={{ fontSize: 20, fontWeight: 900, color: '#7A3A00', letterSpacing: '0.01em', lineHeight: 1.1 }}>
+              Lão Tào
+            </div>
+            <div className="font-body" style={{ fontSize: 11.5, color: '#B06820', marginTop: 3 }}>
+              Xuyên Việt · {provinces.filter(p => p.status === 'flagged').length} Tỉnh Cắm Cờ
+            </div>
+          </div>
+
+          {/* Arrow */}
+          <ChevronRight size={18} strokeWidth={2.5} style={{ color: '#C4873A', flexShrink: 0, opacity: 0.7 }} />
         </div>
 
-        {/* Divider */}
-        <div className="flex items-center gap-2 my-3">
-          <div className="flex-1 h-px" style={{ background: 'rgba(255,255,255,0.25)' }} />
-          <span style={{ color: 'rgba(255,255,255,0.5)', fontSize: 8 }}>✦</span>
-          <div className="flex-1 h-px" style={{ background: 'rgba(255,255,255,0.25)' }} />
-        </div>
-
-        {/* Stats */}
-        <div className="grid grid-cols-3">
+        {/* Stats row */}
+        <div className="flex items-center gap-3 mt-3 pt-2.5" style={{ borderTop: '1px solid #EDD090' }}>
           {[
-            { label: 'Tỉnh Cắm Cờ', value: provinces.filter(p => p.status === 'flagged').length, icon: <Flag size={10} strokeWidth={2.5} /> },
-            { label: 'Địa Điểm', value: subLocations.filter(s => s.status !== 'locked').length, icon: <Map size={10} strokeWidth={2} /> },
-            { label: 'Gem', value: points, icon: <Gem size={10} strokeWidth={2} /> },
+            { icon: <Flag size={10} strokeWidth={2.5} />, value: provinces.filter(p => p.status === 'flagged').length, label: 'Cắm Cờ' },
+            { icon: <Map size={10} strokeWidth={2} />, value: subLocations.filter(s => s.status !== 'locked').length, label: 'Địa Điểm' },
+            { icon: <Award size={10} strokeWidth={2} />, value: earnedBadges, label: 'Huy Hiệu' },
           ].map((s, i) => (
-            <div key={s.label} className="text-center px-2" style={{ borderRight: i < 2 ? '1px solid rgba(255,255,255,0.2)' : 'none' }}>
-              <div className="font-display" style={{ fontSize: 26, fontWeight: 800, color: '#fff', lineHeight: 1, textShadow: '0 1px 4px rgba(0,0,0,0.2)' }}>{s.value}</div>
-              <div className="font-ui mt-1 inline-flex items-center gap-1" style={{ fontSize: 10, color: 'rgba(255,255,255,0.7)' }}>
-                {s.icon} {s.label}
-              </div>
+            <div key={s.label} className="flex items-center gap-1.5 font-ui" style={{
+              fontSize: 11,
+              paddingLeft: i > 0 ? 12 : 0,
+              borderLeft: i > 0 ? '1px solid #EDD090' : 'none',
+            }}>
+              <span style={{ color: '#C4873A' }}>{s.icon}</span>
+              <span style={{ fontWeight: 700, color: '#7A3A00' }}>{s.value}</span>
+              <span style={{ color: '#B06820', fontSize: 10 }}>{s.label}</span>
             </div>
           ))}
         </div>
-
-        {/* MRZ strip */}
-        <div className="mt-3 pt-2.5" style={{ borderTop: '1px solid rgba(255,255,255,0.15)' }}>
-          <div className="font-mono" style={{ fontSize: 7, color: 'rgba(255,255,255,0.25)', letterSpacing: '0.08em', wordBreak: 'break-all' }}>
-            VNMLAOTAO&lt;&lt;&lt;&lt;&lt;&lt;&lt;&lt;&lt;&lt;&lt;&lt;&lt;&lt;&lt;&lt;&lt;&lt;&lt;&lt;&lt;&lt;&lt;&lt;&lt;&lt;&lt;&lt;&lt;&lt;&lt;&lt;&lt;&lt;&lt;&lt;&lt;&lt;&lt;
-          </div>
-        </div>
       </div>
+      </a>
 
       {/* Stamp Grid */}
       <section>
