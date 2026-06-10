@@ -1,10 +1,8 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useCreateBlockNote } from '@blocknote/react';
-import { BlockNoteView } from '@blocknote/mantine';
-import { MantineProvider } from '@mantine/core';
-import '@mantine/core/styles.css';
+import { BlockNoteView } from '@blocknote/shadcn';
 import '@blocknote/core/fonts/inter.css';
-import '@blocknote/mantine/style.css';
+import '@blocknote/shadcn/style.css';
 import { ArrowLeft, Eye, EyeOff, Save, Trash2 } from 'lucide-react';
 import type { Article } from '../store';
 
@@ -144,15 +142,9 @@ export function ArticleEditor({
         <div style={{ height: 1, background: 'var(--border-subtle)', margin: '4px 0' }} />
       </div>
 
-      {/* BlockNote Editor — wrapped in MantineProvider */}
+      {/* BlockNote Editor */}
       <div style={{ flex: 1, padding: '0 4px' }}>
-        <MantineProvider>
-          <BlockNoteView
-            editor={editor}
-            theme="light"
-            style={{ minHeight: 400 }}
-          />
-        </MantineProvider>
+        <BlockNoteView editor={editor} theme="light" style={{ minHeight: 400 }} />
       </div>
     </div>
   );

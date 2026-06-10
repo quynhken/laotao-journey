@@ -1,9 +1,7 @@
 import { useCreateBlockNote } from '@blocknote/react';
-import { BlockNoteView } from '@blocknote/mantine';
-import { MantineProvider } from '@mantine/core';
-import '@mantine/core/styles.css';
+import { BlockNoteView } from '@blocknote/shadcn';
 import '@blocknote/core/fonts/inter.css';
-import '@blocknote/mantine/style.css';
+import '@blocknote/shadcn/style.css';
 import { ArrowLeft, Calendar } from 'lucide-react';
 import type { Article } from '../store';
 
@@ -16,7 +14,6 @@ export function ArticleView({ article, onBack }: { article: Article; onBack: () 
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', minHeight: '100%' }}>
-      {/* Back bar */}
       <div style={{
         position: 'sticky', top: 0, zIndex: 10,
         background: 'var(--bg-base)',
@@ -32,14 +29,12 @@ export function ArticleView({ article, onBack }: { article: Article; onBack: () 
         </span>
       </div>
 
-      {/* Cover image */}
       {article.coverImage && (
         <div style={{ aspectRatio: '16/9', overflow: 'hidden' }}>
           <img src={article.coverImage} alt={article.title} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
         </div>
       )}
 
-      {/* Header */}
       <div style={{ padding: '20px 20px 0' }}>
         <div className="font-ui inline-flex items-center gap-1.5 mb-2" style={{ fontSize: 11, color: 'var(--text-tertiary)' }}>
           <Calendar size={11} strokeWidth={2} /> {article.date}
@@ -55,15 +50,8 @@ export function ArticleView({ article, onBack }: { article: Article; onBack: () 
         <div style={{ height: 1, background: 'var(--border-subtle)', margin: '16px 0' }} />
       </div>
 
-      {/* Content — read-only */}
       <div style={{ flex: 1, padding: '0 4px 24px' }}>
-        <MantineProvider>
-          <BlockNoteView
-            editor={editor}
-            editable={false}
-            theme="light"
-          />
-        </MantineProvider>
+        <BlockNoteView editor={editor} editable={false} theme="light" />
       </div>
     </div>
   );
