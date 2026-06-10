@@ -53,7 +53,7 @@ function MainApp() {
     const next = new Set(flagged);
     next.add(id);
     setFlagged(next);
-    addPoints(100, 'Cắm Cờ');
+    addPoints(10, 'Cắm Cờ');
   };
 
   const handleOnboardStart = () => {
