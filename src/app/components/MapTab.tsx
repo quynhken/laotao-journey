@@ -247,28 +247,30 @@ export function MapTab({ flagged, onFlag, onQuiz }: Props) {
           const color = provColor(p);
           const isActive = activeProvince?.id === p.id;
           const isLatest = p.status === 'flagged';
+          const sz = isLatest ? 52 : 40;
+          const off = isLatest ? -6 : 0;
           return (
             <Marker key={`prov-${p.id}`} longitude={p.lng} latitude={p.lat} anchor="center">
               <button
                 onClick={(e) => handleProvinceClick(p, e)}
                 style={{
-                  width: 40, height: 40, borderRadius: '50%',
+                  width: sz, height: sz, borderRadius: '50%',
                   cursor: 'pointer', overflow: 'visible', padding: 0,
                   background: 'transparent', flexShrink: 0,
                   transition: 'all 200ms cubic-bezier(0.34,1.56,0.64,1)',
-                  zIndex: isActive ? 10 : 1,
+                  zIndex: isLatest ? 20 : isActive ? 10 : 1,
                 }}
                 aria-label={p.name}
               >
                 {isLatest && (<>
-                  <span style={{ position: 'absolute', top: 0, left: 0, width: 40, height: 40, borderRadius: '50%', background: color, opacity: 0.4, animation: 'pulseRing 2s ease-out infinite' }} />
-                  <span style={{ position: 'absolute', top: 0, left: 0, width: 40, height: 40, borderRadius: '50%', background: color, opacity: 0.2, animation: 'pulseRing 2s ease-out infinite 0.75s' }} />
+                  <span style={{ position: 'absolute', top: 0, left: 0, width: sz, height: sz, borderRadius: '50%', background: color, opacity: 0.4, animation: 'pulseRing 2s ease-out infinite' }} />
+                  <span style={{ position: 'absolute', top: 0, left: 0, width: sz, height: sz, borderRadius: '50%', background: color, opacity: 0.2, animation: 'pulseRing 2s ease-out infinite 0.75s' }} />
                 </>)}
                 <div style={{
-                  position: 'absolute', top: 0, left: 0, width: 40, height: 40,
+                  position: 'absolute', top: 0, left: 0, width: sz, height: sz,
                   borderRadius: '50%', overflow: 'hidden',
-                  border: `2.5px solid ${color}`,
-                  boxShadow: `0 2px 10px rgba(0,0,0,0.18)`,
+                  border: `${isLatest ? 3 : 2.5}px solid ${color}`,
+                  boxShadow: isLatest ? `0 4px 16px rgba(0,0,0,0.28), 0 0 0 3px ${color}30` : `0 2px 10px rgba(0,0,0,0.18)`,
                   background: '#F7F3EE',
                 }}>
                   <img src={p.image} alt={p.name} style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block', opacity: p.status === 'locked' ? 0.4 : 1 }} />
@@ -280,7 +282,7 @@ export function MapTab({ flagged, onFlag, onQuiz }: Props) {
                 </div>
                 {/* Province number badge */}
                 <span style={{
-                  position: 'absolute', top: -4, right: -4,
+                  position: 'absolute', top: off, right: off,
                   minWidth: 16, height: 16, borderRadius: 8,
                   background: color, color: '#fff',
                   fontSize: 8, fontWeight: 800,
