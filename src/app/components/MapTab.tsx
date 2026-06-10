@@ -316,7 +316,8 @@ export function MapTab({ flagged, onFlag, onQuiz }: Props) {
           const color  = subColor(s);
           const isSel  = selected?.id === s.id;
           const isTop  = subDisplayIndex[s.id] === provinceSubs.length; // highest index = latest
-          const sz = isSel ? 44 : 36;
+          const sz = isSel ? 44 : isTop ? 52 : 36;
+          const badgeOff = isTop && !isSel ? -6 : -4;
           return (
             <Marker key={`sub-${s.id}`} longitude={s.lng} latitude={s.lat} anchor="center">
               <button
@@ -326,10 +327,10 @@ export function MapTab({ flagged, onFlag, onQuiz }: Props) {
                   borderRadius: '50%', cursor: 'pointer',
                   overflow: 'visible', padding: 0, background: 'transparent', flexShrink: 0,
                   transition: 'transform 200ms cubic-bezier(0.34,1.56,0.64,1)',
-                  zIndex: isSel ? 10 : 1,
+                  zIndex: isSel ? 10 : isTop ? 20 : 1,
                 }}
                 aria-label={s.name}
-                onMouseEnter={e => (e.currentTarget.style.transform = 'scale(1.25)')}
+                onMouseEnter={e => (e.currentTarget.style.transform = 'scale(1.15)')}
                 onMouseLeave={e => (e.currentTarget.style.transform = 'scale(1)')}
               >
                 {/* Pulse — only on the highest-index sublocation */}
@@ -338,11 +339,11 @@ export function MapTab({ flagged, onFlag, onQuiz }: Props) {
                   <span style={{ position: 'absolute', top: 0, left: 0, width: sz, height: sz, borderRadius: '50%', background: color, opacity: 0.2, animation: 'pulseRing 2s ease-out infinite 0.75s' }} />
                 </>)}
                 <div style={{
-                  position: 'absolute', inset: 0,
-                  width: isSel ? 44 : 36, height: isSel ? 44 : 36,
+                  position: 'absolute', top: 0, left: 0,
+                  width: sz, height: sz,
                   borderRadius: '50%', overflow: 'hidden',
-                  border: `2.5px solid ${color}`,
-                  boxShadow: isSel ? `0 0 0 4px ${color}30, 0 4px 16px rgba(0,0,0,0.22)` : '0 2px 8px rgba(0,0,0,0.14)',
+                  border: `${isTop ? 3 : 2.5}px solid ${color}`,
+                  boxShadow: isTop ? `0 4px 16px rgba(0,0,0,0.28), 0 0 0 3px ${color}30` : isSel ? `0 0 0 4px ${color}30, 0 4px 16px rgba(0,0,0,0.22)` : '0 2px 8px rgba(0,0,0,0.14)',
                   background: '#F7F3EE',
                   flexShrink: 0,
                 }}>
@@ -355,7 +356,7 @@ export function MapTab({ flagged, onFlag, onQuiz }: Props) {
                 </div>
                 {/* locNum badge */}
                 <span style={{
-                  position: 'absolute', top: -4, right: -4,
+                  position: 'absolute', top: badgeOff, right: badgeOff,
                   minWidth: 16, height: 16, borderRadius: 8,
                   background: color, color: '#fff',
                   fontSize: 8, fontWeight: 800,
