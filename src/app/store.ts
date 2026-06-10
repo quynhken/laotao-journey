@@ -47,6 +47,18 @@ export type VideoCategory = {
   color: string;
 };
 
+export type Article = {
+  id: number;
+  title: string;
+  slug: string;
+  coverImage?: string;
+  content: unknown; // BlockNote JSON blocks
+  categoryId?: number;
+  date: string; // DD.MM.YYYY
+  published: boolean;
+  excerpt?: string;
+};
+
 export type AppSettings = {
   header: {
     typewriterNames: string[];
@@ -78,6 +90,7 @@ export type AppSettings = {
   subLocations: SubLocation[];
   videos: VideoItem[];
   videoCategories: VideoCategory[];
+  articles: Article[];
   onboardingPhotos: OnboardingPhoto[];
 };
 
@@ -97,6 +110,7 @@ export const DEFAULT_SETTINGS: AppSettings = {
   subLocations: DEFAULT_SUBS.map((s) => ({ ...s })),
   videos: [],
   videoCategories: [],
+  articles: [],
   onboardingPhotos: [],
 };
 
@@ -125,6 +139,7 @@ function readStorage(): AppSettings {
       subLocations: parsed.subLocations ?? DEFAULT_SETTINGS.subLocations,
       videos: parsed.videos ?? DEFAULT_SETTINGS.videos,
       videoCategories: parsed.videoCategories ?? DEFAULT_SETTINGS.videoCategories,
+      articles: parsed.articles ?? DEFAULT_SETTINGS.articles,
       onboardingPhotos: parsed.onboardingPhotos ?? DEFAULT_SETTINGS.onboardingPhotos,
       // migrate: nếu có initialPoints cũ thì dùng làm viPoint
       viPoint: parsed.viPoint ?? (parsed as any).initialPoints ?? DEFAULT_SETTINGS.viPoint,
@@ -747,4 +762,20 @@ export async function submitSubReview(subId: number, review: { name: string; sta
     if (!res.ok) return null;
     return (await res.json()).review ?? null;
   } catch { return null; }
+}
+
+// ── Articles ───────────────────────────────────────────────────────────────
+
+export async function saveArticle(article: Article): Promise<boolean> {
+  const settings = getSettings();
+  const exists = settings.articles.some(a => a.id === article.id);
+  const next = exists
+    ? settings.articles.map(a => a.id === article.id ? article : a)
+    : [...settings.articles, article];
+  return pushSettings({ ...settings, articles: next });
+}
+
+export async function deleteArticle(id: number): Promise<boolean> {
+  const settings = getSettings();
+  return pushSettings({ ...settings, articles: settings.articles.filter(a => a.id !== id) });
 }

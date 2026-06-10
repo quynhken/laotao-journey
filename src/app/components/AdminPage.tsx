@@ -43,7 +43,11 @@ import {
   uploadOnboardingPhoto,
   deleteOnboardingPhoto,
   type OnboardingPhoto,
+  saveArticle,
+  deleteArticle,
+  type Article,
 } from '../store';
+import { ArticleEditor } from './ArticleEditor';
 import type { Badge, Province, SubLocation } from './data';
 import { projectId, publicAnonKey } from '/utils/supabase/info';
 
@@ -70,7 +74,7 @@ const B = {
   radiusPill: 100,
 };
 
-type Section = 'monitor' | 'header' | 'trip' | 'badges' | 'provinces' | 'sublocations' | 'videos' | 'categories' | 'visitors' | 'onboarding-photos' | 'security';
+type Section = 'monitor' | 'header' | 'trip' | 'badges' | 'provinces' | 'sublocations' | 'videos' | 'categories' | 'articles' | 'visitors' | 'onboarding-photos' | 'security';
 
 const SECTIONS: { key: Section; label: string }[] = [
   { key: 'monitor', label: '🟢 Monitor' },
@@ -81,6 +85,7 @@ const SECTIONS: { key: Section; label: string }[] = [
   { key: 'sublocations', label: 'Địa Điểm' },
   { key: 'videos', label: 'Nội Dung' },
   { key: 'categories', label: 'Danh Mục' },
+  { key: 'articles', label: '✍️ Bài Viết' },
   { key: 'visitors', label: 'Người Dùng' },
   { key: 'onboarding-photos', label: 'Ảnh Onboarding' },
   { key: 'security', label: 'Bảo Mật' },
@@ -389,6 +394,7 @@ function AdminPanel({ onLogout }: { onLogout: () => void }) {
           {section === 'sublocations' && <SubLocationsSection draft={draft} setDraft={setDraft} />}
           {section === 'videos' && <VideosSection draft={draft} setDraft={setDraft} />}
           {section === 'categories' && <CategoriesSection draft={draft} setDraft={setDraft} />}
+          {section === 'articles' && <ArticlesSection />}
           {section === 'monitor' && <MonitorSection />}
           {section === 'visitors' && <VisitorsSection />}
           {section === 'onboarding-photos' && <OnboardingPhotosSection />}
@@ -3027,5 +3033,91 @@ function ImportMakeSection({ draft, setDraft }: SP) {
         )}
       </Card>
     </>
+  );
+}
+
+// ── Articles Section ─────────────────────────────────────────────────────────
+function ArticlesSection() {
+  const settings = useSettings();
+  const articles = settings.articles ?? [];
+  const [editing, setEditing] = useState<Article | null | 'new'>(null);
+  const [saving, setSaving] = useState(false);
+
+  async function handleSave(article: Article) {
+    setSaving(true);
+    await saveArticle(article);
+    setSaving(false);
+    setEditing(null);
+  }
+
+  async function handleDelete(id: number) {
+    await deleteArticle(id);
+    setEditing(null);
+  }
+
+  if (editing !== null) {
+    return (
+      <div style={{ height: '100%' }}>
+        <ArticleEditor
+          article={editing === 'new' ? null : editing}
+          onSave={handleSave}
+          onDelete={handleDelete}
+          onBack={() => setEditing(null)}
+        />
+        {saving && <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.3)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 50 }}><span style={{ background: '#fff', padding: '12px 24px', borderRadius: 12, fontWeight: 700 }}>Đang lưu…</span></div>}
+      </div>
+    );
+  }
+
+  return (
+    <div className="p-4 space-y-4">
+      <div className="flex items-center justify-between">
+        <div>
+          <div className="font-ui" style={{ fontSize: 11, letterSpacing: '0.06em', color: 'var(--text-tertiary)' }}>QUẢN LÝ BÀI VIẾT</div>
+          <h2 className="font-display font-bold" style={{ fontSize: 18 }}>Bài Viết ({articles.length})</h2>
+        </div>
+        <button
+          onClick={() => setEditing('new')}
+          style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '8px 14px', borderRadius: 10, background: 'var(--accent-500)', color: '#fff', border: 'none', cursor: 'pointer', fontSize: 13, fontWeight: 700 }}>
+          <Plus size={14} strokeWidth={2.5} /> Bài mới
+        </button>
+      </div>
+
+      {articles.length === 0 && (
+        <div className="font-ui py-10 text-center" style={{ fontSize: 14, color: 'var(--text-tertiary)', border: '2px dashed var(--border-subtle)', borderRadius: 12 }}>
+          Chưa có bài viết nào. Bấm "Bài mới" để bắt đầu.
+        </div>
+      )}
+
+      <div className="space-y-2">
+        {[...articles].sort((a, b) => b.id - a.id).map(article => (
+          <button
+            key={article.id}
+            onClick={() => setEditing(article)}
+            style={{
+              display: 'flex', alignItems: 'center', gap: 12, width: '100%', textAlign: 'left',
+              padding: '12px 14px', borderRadius: 12,
+              border: '1px solid var(--border-subtle)',
+              background: 'var(--bg-surface)', cursor: 'pointer',
+            }}>
+            <div style={{ flex: 1, minWidth: 0 }}>
+              <div className="font-display" style={{ fontSize: 14, fontWeight: 700, lineHeight: 1.2 }}>{article.title}</div>
+              {article.excerpt && <div className="font-body" style={{ fontSize: 12, color: 'var(--text-secondary)', marginTop: 3, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{article.excerpt}</div>}
+            </div>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexShrink: 0 }}>
+              <span style={{
+                padding: '2px 8px', borderRadius: 20, fontSize: 10, fontWeight: 700,
+                background: article.published ? '#D1FAE5' : '#F3F4F6',
+                color: article.published ? '#065F46' : '#6B7280',
+              }}>
+                {article.published ? 'Hiện' : 'Ẩn'}
+              </span>
+              <span style={{ fontSize: 11, color: 'var(--text-tertiary)' }}>{article.date}</span>
+              <ChevronRight size={14} strokeWidth={2} style={{ color: 'var(--text-tertiary)' }} />
+            </div>
+          </button>
+        ))}
+      </div>
+    </div>
   );
 }
