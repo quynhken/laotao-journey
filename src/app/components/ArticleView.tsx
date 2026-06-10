@@ -1,5 +1,7 @@
 import { useCreateBlockNote } from '@blocknote/react';
 import { BlockNoteView } from '@blocknote/mantine';
+import { MantineProvider } from '@mantine/core';
+import '@mantine/core/styles.css';
 import '@blocknote/core/fonts/inter.css';
 import '@blocknote/mantine/style.css';
 import { ArrowLeft, Calendar } from 'lucide-react';
@@ -55,11 +57,13 @@ export function ArticleView({ article, onBack }: { article: Article; onBack: () 
 
       {/* Content — read-only */}
       <div style={{ flex: 1, padding: '0 4px 24px' }}>
-        <BlockNoteView
-          editor={editor}
-          editable={false}
-          theme="light"
-        />
+        <MantineProvider>
+          <BlockNoteView
+            editor={editor}
+            editable={false}
+            theme="light"
+          />
+        </MantineProvider>
       </div>
     </div>
   );

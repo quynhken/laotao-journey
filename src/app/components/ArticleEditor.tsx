@@ -1,6 +1,8 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useCreateBlockNote } from '@blocknote/react';
 import { BlockNoteView } from '@blocknote/mantine';
+import { MantineProvider } from '@mantine/core';
+import '@mantine/core/styles.css';
 import '@blocknote/core/fonts/inter.css';
 import '@blocknote/mantine/style.css';
 import { ArrowLeft, Eye, EyeOff, Save, Trash2 } from 'lucide-react';
@@ -78,7 +80,6 @@ export function ArticleEditor({
           {isNew ? 'Bài viết mới' : 'Chỉnh sửa bài viết'}
         </span>
 
-        {/* Published toggle */}
         <button
           onClick={() => setPublished(p => !p)}
           style={{
@@ -143,13 +144,15 @@ export function ArticleEditor({
         <div style={{ height: 1, background: 'var(--border-subtle)', margin: '4px 0' }} />
       </div>
 
-      {/* BlockNote Editor */}
+      {/* BlockNote Editor — wrapped in MantineProvider */}
       <div style={{ flex: 1, padding: '0 4px' }}>
-        <BlockNoteView
-          editor={editor}
-          theme="light"
-          style={{ minHeight: 400 }}
-        />
+        <MantineProvider>
+          <BlockNoteView
+            editor={editor}
+            theme="light"
+            style={{ minHeight: 400 }}
+          />
+        </MantineProvider>
       </div>
     </div>
   );
